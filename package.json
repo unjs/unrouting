@@ -23,7 +23,6 @@
     "prepare": "simple-git-hooks",
     "prepack": "pnpm build",
     "prepublishOnly": "pnpm lint && pnpm test",
-    "release": "release-it",
     "test": "pnpm test:unit && pnpm test:types",
     "test:unit": "vitest",
     "test:types": "tsc --noEmit"
