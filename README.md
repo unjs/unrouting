@@ -14,7 +14,7 @@
 This library is a work in progress and in active development.
 
 - [ ] support exporting to pure RegExp matcher
-- [ ] support exporting to radix3 routes
+- [ ] support exporting to radix3/Nitro routes
 - [ ] support exporting to `vue-router` routes with compatibility for [Nuxt](https://github.com/nuxt/nuxt) and [unplugin-vue-router](https://github.com/posva/unplugin-vue-router)
 - [ ] support exporting to SolidStart
 - [ ] support exporting to sveltekit routes

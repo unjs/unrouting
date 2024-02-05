@@ -6,7 +6,7 @@ import { parsePath } from './parse'
 
 /**
  * - [x] support exporting to pure RegExp matcher
- * - [x] support exporting to radix3 routes
+ * - [x] support exporting to radix3/Nitro routes
  * - [ ] support exporting to `vue-router` routes
  *       with compatibility for [Nuxt](https://github.com/nuxt/nuxt) and
  *       [unplugin-vue-router](https://github.com/posva/unplugin-vue-router)
