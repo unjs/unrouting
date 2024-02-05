@@ -13,11 +13,16 @@
 
 This library is a work in progress and in active development.
 
-- [ ] support exporting to pure RegExp matcher
-- [ ] support exporting to radix3/Nitro routes
-- [ ] support exporting to `vue-router` routes with compatibility for [Nuxt](https://github.com/nuxt/nuxt) and [unplugin-vue-router](https://github.com/posva/unplugin-vue-router)
-- [ ] support exporting to SolidStart
-- [ ] support exporting to sveltekit routes
+- [ ] generic route parsing function with options to cover major filesystem routing patterns
+  - [x] [Nuxt](https://github.com/nuxt/nuxt)
+  - [ ] [unplugin-vue-router](https://github.com/posva/unplugin-vue-router)
+- [ ] export capability for framework routers
+  - [x] RegExp patterns
+  - [ ] `vue-router` routes
+  - [ ] [radix3](http://github.com/unjs/radix3)/[Nitro](https://nitro.unjs.io/) routes
+  - [ ] SolidStart
+  - [ ] sveltekit routes
+- [ ] support scanning FS (with optional watch mode)
 - [ ] and more
 
 ## Usage
