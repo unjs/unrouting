@@ -18,10 +18,10 @@ This library is a work in progress and in active development.
   - [ ] [unplugin-vue-router](https://github.com/posva/unplugin-vue-router)
 - [ ] export capability for framework routers
   - [x] RegExp patterns
-  - [ ] `vue-router` routes
+  - [ ] [`vue-router`](https://router.vuejs.org/) routes
   - [ ] [radix3](http://github.com/unjs/radix3)/[Nitro](https://nitro.unjs.io/) routes
-  - [ ] SolidStart
-  - [ ] sveltekit routes
+  - [ ] [SolidStart](https://start.solidjs.com/core-concepts/routing)
+  - [ ] [SvelteKit](https://kit.svelte.dev/docs/routing) routes
 - [ ] support scanning FS (with optional watch mode)
 - [ ] and more
 
