@@ -33,17 +33,17 @@
   },
   "devDependencies": {
     "@antfu/eslint-config": "latest",
-    "@types/node": "20.x",
+    "@types/node": "20.11.13",
     "@vitest/coverage-v8": "latest",
     "eslint": "latest",
     "lint-staged": "latest",
-    "radix3": "^1.1.0",
+    "radix3": "1.1.0",
     "simple-git-hooks": "latest",
     "typescript": "latest",
     "unbuild": "latest",
     "vite": "latest",
     "vitest": "latest",
-    "vue-router": "^4.2.5"
+    "vue-router": "4.2.5"
   },
   "resolutions": {
     "unrouting": "link:."
