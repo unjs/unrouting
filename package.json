@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "@antfu/eslint-config": "latest",
-    "@types/node": "20.11.20",
+    "@types/node": "20.11.24",
     "@vitest/coverage-v8": "latest",
     "eslint": "latest",
     "lint-staged": "latest",
