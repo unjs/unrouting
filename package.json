@@ -37,7 +37,7 @@
     "@vitest/coverage-v8": "latest",
     "eslint": "latest",
     "lint-staged": "latest",
-    "radix3": "1.1.0",
+    "radix3": "1.1.1",
     "simple-git-hooks": "latest",
     "typescript": "latest",
     "unbuild": "latest",
