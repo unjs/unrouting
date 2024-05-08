@@ -23,6 +23,7 @@
     "prepare": "simple-git-hooks",
     "prepack": "pnpm build",
     "prepublishOnly": "pnpm lint && pnpm test",
+    "release": "pnpm test && bumpp && npm publish",
     "test": "pnpm test:unit && pnpm test:types",
     "test:unit": "vitest",
     "test:types": "tsc --noEmit"
@@ -35,6 +36,7 @@
     "@antfu/eslint-config": "latest",
     "@types/node": "20.12.7",
     "@vitest/coverage-v8": "latest",
+    "bumpp": "^9.4.1",
     "eslint": "latest",
     "lint-staged": "latest",
     "radix3": "1.1.2",
