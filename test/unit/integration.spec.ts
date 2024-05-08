@@ -1,5 +1,4 @@
-import { describe, expect, it } from 'vitest'
-import { parsePath } from '../../src'
+import { describe, it } from 'vitest'
 
 describe('nuxt routing', () => {
   const _staticExamples = {
