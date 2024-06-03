@@ -2,7 +2,7 @@
   "name": "unrouting",
   "type": "module",
   "version": "0.0.1",
-  "packageManager": "pnpm@9.0.6",
+  "packageManager": "pnpm@9.1.4",
   "description": "",
   "license": "MIT",
   "repository": "unjs/unrouting",
