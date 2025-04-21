@@ -11,7 +11,7 @@ import { parsePath } from './parse'
  *       with compatibility for [Nuxt](https://github.com/nuxt/nuxt) and
  *       [unplugin-vue-router](https://github.com/posva/unplugin-vue-router)
  * - [ ] support exporting to SolidStart
- * - [ ] support exporting to sveltekit routes
+ * - [ ] support exporting to SvelteKit routes
  */
 
 /**
