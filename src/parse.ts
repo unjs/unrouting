@@ -29,7 +29,7 @@ export function parsePath(filePath: string, options: ParsePathOptions = {}): Par
   return segments.map(s => parseSegment(s))
 }
 
-const PARAM_CHAR_RE = /[\w\d_.]/
+const PARAM_CHAR_RE = /[\w.]/
 
 export type SegmentType = 'static' | 'dynamic' | 'optional' | 'catchall'
 export interface ParsedPathSegmentToken { type: SegmentType, value: string }

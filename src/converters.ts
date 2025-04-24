@@ -1,7 +1,7 @@
-import { encodePath, joinURL } from 'ufo'
+import type { ParsedPath } from './parse'
 import escapeStringRegexp from 'escape-string-regexp'
 
-import type { ParsedPath } from './parse'
+import { encodePath, joinURL } from 'ufo'
 import { parsePath } from './parse'
 
 /**
