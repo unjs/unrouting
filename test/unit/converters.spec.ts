@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
 import { createRouter as createRadixRouter } from 'radix3'
+import { describe, expect, it } from 'vitest'
 import { createMemoryHistory, createRouter as createVueRouter } from 'vue-router'
 import { toRadix3, toRegExp, toVueRouter4 } from '../../src'
 
