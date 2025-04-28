@@ -2,7 +2,7 @@
   "name": "unrouting",
   "type": "module",
   "version": "0.0.1",
-  "packageManager": "pnpm@10.9.0",
+  "packageManager": "pnpm@10.10.0",
   "description": "",
   "license": "MIT",
   "repository": "unjs/unrouting",
@@ -34,7 +34,7 @@
   },
   "devDependencies": {
     "@antfu/eslint-config": "latest",
-    "@types/node": "22.14.1",
+    "@types/node": "22.15.3",
     "@vitest/coverage-v8": "latest",
     "bumpp": "10.1.0",
     "eslint": "latest",
@@ -45,7 +45,7 @@
     "unbuild": "latest",
     "vite": "latest",
     "vitest": "latest",
-    "vue-router": "4.5.0"
+    "vue-router": "4.5.1"
   },
   "resolutions": {
     "unrouting": "link:."
