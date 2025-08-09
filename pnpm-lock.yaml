@@ -36,9 +36,9 @@ importers:
       lint-staged:
         specifier: latest
         version: 16.1.4
-      radix3:
-        specifier: 1.1.2
-        version: 1.1.2
+      rou3:
+        specifier: ^0.7.3
+        version: 0.7.3
       simple-git-hooks:
         specifier: latest
         version: 2.13.1
@@ -2490,9 +2490,6 @@ packages:
   queue-microtask@1.2.3:
     resolution: {integrity: sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==}
 
-  radix3@1.1.2:
-    resolution: {integrity: sha512-b484I/7b8rDEdSDKckSSBA8knMpcdsXudlE/LNL639wFoHKwLbEkQFZHWEYwDC0wa0FKUcCY+GAF73Z7wxNVFA==}
-
   rc9@2.1.2:
     resolution: {integrity: sha512-btXCnMmRIBINM2LDZoEmOogIZU7Qe7zn4BpomSKZ/ykbLObuBdvG+mFq11DL6fjH1DRwHhrlgtYWG96bJiC7Cg==}
 
@@ -2555,6 +2552,9 @@ packages:
     resolution: {integrity: sha512-4iya7Jb76fVpQyLoiVpzUrsjQ12r3dM7fIVz+4NwoYvZOShknRmiv+iu9CClZml5ZLGb0XMcYLutK6w9tgxHDw==}
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
     hasBin: true
+
+  rou3@0.7.3:
+    resolution: {integrity: sha512-KKenF/hB2iIhS1ohj226LT+/8uKCBpSMqeS4V1UPN9vad99uLoyIhrULRRB1skaB40LQHcBlSsAi3sT8MaoDDQ==}
 
   run-parallel@1.2.0:
     resolution: {integrity: sha512-5l4VyZR86LZ/lDxZTR6jqL8AFE2S0IFLMP26AbjsLVADxHdhB/c0GUsH+y39UfCi3dzz8OlQuPmnaJOMoDHQBA==}
@@ -5458,8 +5458,6 @@ snapshots:
 
   queue-microtask@1.2.3: {}
 
-  radix3@1.1.2: {}
-
   rc9@2.1.2:
     dependencies:
       defu: 6.1.4
@@ -5560,6 +5558,8 @@ snapshots:
       '@rollup/rollup-win32-ia32-msvc': 4.45.1
       '@rollup/rollup-win32-x64-msvc': 4.45.1
       fsevents: 2.3.3
+
+  rou3@0.7.3: {}
 
   run-parallel@1.2.0:
     dependencies:

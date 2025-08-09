@@ -19,7 +19,7 @@ This library is a work in progress and in active development.
 - [ ] export capability for framework routers
   - [x] RegExp patterns
   - [x] [`vue-router`](https://router.vuejs.org/) routes
-  - [ ] [radix3](http://github.com/unjs/radix3)/[Nitro](https://nitro.unjs.io/) routes
+  - [x] [rou3](http://github.com/h3js/rou3)/[Nitro](https://nitro.unjs.io/) routes
   - [ ] [SolidStart](https://start.solidjs.com/core-concepts/routing)
   - [ ] [SvelteKit](https://kit.svelte.dev/docs/routing) routes
 - [ ] support scanning FS (with optional watch mode)
@@ -77,7 +77,7 @@ console.log(result2.segments) // [[{ type: 'static', value: 'api' }]]
 ### Convert to Router Formats
 
 ```js
-import { parsePath, toVueRouter4, toRadix3, toRegExp } from 'unrouting'
+import { parsePath, toVueRouter4, toRou3, toRegExp } from 'unrouting'
 
 const result = parsePath('users/[id]/posts/[slug].vue')
 const segments = result.segments
@@ -86,8 +86,8 @@ const segments = result.segments
 const vueRoute = toVueRouter4(segments)
 console.log(vueRoute.path) // '/users/:id()/posts/:slug()'
 
-// Radix3/Nitro format  
-const nitroRoute = toRadix3(segments)
+// Rou3/Nitro format  
+const nitroRoute = toRou3(segments)
 console.log(nitroRoute) // '/users/:id/posts/:slug'
 
 // RegExp pattern
@@ -145,9 +145,9 @@ Convert parsed segments to Vue Router 4 format.
 
 **Returns:** `{ path: string }`
 
-### `toRadix3(segments)`
+### `toRou3(segments)`
 
-Convert parsed segments to Radix3/Nitro format.
+Convert parsed segments to Rou3/Nitro format.
 
 **Parameters:**
 - `segments` (ParsedPathSegment[]): The segments from `parsePath().segments`

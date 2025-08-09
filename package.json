@@ -39,7 +39,7 @@
     "bumpp": "10.2.2",
     "eslint": "latest",
     "lint-staged": "latest",
-    "radix3": "1.1.2",
+    "rou3": "^0.7.3",
     "simple-git-hooks": "latest",
     "typescript": "latest",
     "unbuild": "latest",

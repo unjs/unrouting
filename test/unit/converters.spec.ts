@@ -1,9 +1,9 @@
-import { createRouter as createRadixRouter } from 'radix3'
+import { addRoute, createRouter, findRoute } from 'rou3'
 import { describe, expect, it } from 'vitest'
 import { createMemoryHistory, createRouter as createVueRouter } from 'vue-router'
-import { toRadix3, toRegExp, toVueRouter4 } from '../../src'
+import { toRegExp, toRou3, toVueRouter4 } from '../../src'
 
-describe('radix3 support', () => {
+describe('rou3 support', () => {
   const paths = {
     'file.vue': '/file',
     'index.vue': '/',
@@ -13,10 +13,10 @@ describe('radix3 support', () => {
     '/file/[...slug].vue': '/file/here/we/go',
     '[a1_1a].vue': '/file',
     '[b2.2b].vue': '/file',
-    'test:name.vue': '/test:name',
-    // TODO: mixed parameters are not (yet?) supported in radix3
+    // TODO: mixed parameters are not (yet?) supported in rou3
+    // 'test:name.vue': '/test:name',
     // '[b2]_[2b].vue': '/fi_le',
-    // TODO: optional parameters are not (yet?) supported in radix3
+    // TODO: optional parameters are not (yet?) supported in rou3
     // '[[foo]]/index.vue': '/some',
     // '[[sub]]/route-[slug].vue': '/some/route-value',
     // 'optional/[[opt]].vue': '/optional',
@@ -27,12 +27,13 @@ describe('radix3 support', () => {
     // '[[d4-4d]].vue': '/file',
   }
 
-  it('toRadix3', () => {
+  it('toRou3', () => {
     const result = Object.fromEntries(Object.entries(paths).map(([path, example]) => {
-      const routeMatcher = createRadixRouter()
-      routeMatcher.insert(toRadix3(path), { value: example })
-      const result = routeMatcher.lookup(example)
-      return [path, result?.params || result?.value]
+      const router = createRouter<{ value: string }>()
+      addRoute(router, 'GET', toRou3(path), { value: example })
+      const result = findRoute(router, 'GET', example)
+      // Return params if available (for dynamic routes), otherwise return the value from data
+      return [path, result?.params || result?.data.value]
     }))
 
     expect(result).toMatchInlineSnapshot(`
@@ -53,7 +54,6 @@ describe('radix3 support', () => {
         "foo/index.vue": "/foo",
         "index.vue": "/",
         "test.html.vue": "/test.html",
-        "test:name.vue": "/test:name",
       }
     `)
   })

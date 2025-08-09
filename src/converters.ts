@@ -1,12 +1,12 @@
-import escapeStringRegexp from 'escape-string-regexp'
-
-import { encodePath, joinURL } from 'ufo'
 import type { ParsedPathSegment } from './parse'
+
+import escapeStringRegexp from 'escape-string-regexp'
+import { encodePath, joinURL } from 'ufo'
 import { parsePath } from './parse'
 
 /**
  * - [x] support exporting to pure RegExp matcher
- * - [x] support exporting to radix3/Nitro routes
+ * - [x] support exporting to rou3/Nitro routes
  * - [ ] support exporting to `vue-router` routes
  *       with compatibility for [Nuxt](https://github.com/nuxt/nuxt) and
  *       [unplugin-vue-router](https://github.com/posva/unplugin-vue-router)
@@ -15,9 +15,9 @@ import { parsePath } from './parse'
  */
 
 /**
- * TODO: need to implement protection logging + fall back to what radix3 supports.
+ * Convert file path to rou3 route pattern format.
  */
-export function toRadix3(filePath: string | ParsedPathSegment[]) {
+export function toRou3(filePath: string | ParsedPathSegment[]) {
   const segments = typeof filePath === 'string' ? parsePath(filePath).segments : filePath
 
   let route = '/'
@@ -26,24 +26,24 @@ export function toRadix3(filePath: string | ParsedPathSegment[]) {
     if (segment.every(token => token.type === 'group'))
       continue
 
-    let radixSegment = ''
+    let rou3Segment = ''
     for (const token of segment) {
       if (token.type === 'static')
-        radixSegment += token.value
+        rou3Segment += token.value
 
       if (token.type === 'dynamic')
-        radixSegment += token.value ? `:${token.value}` : '*'
+        rou3Segment += token.value ? `:${token.value}` : '*'
 
       if (token.type === 'optional')
-        throw new TypeError('[unrouting] `toRadix3` does not support optional parameters')
+        throw new TypeError('[unrouting] `toRou3` does not support optional parameters')
 
       if (token.type === 'catchall')
-        radixSegment += token.value ? `**:${token.value}` : '**'
+        rou3Segment += token.value ? `**:${token.value}` : '**'
     }
 
     // If a segment has value '' we skip adding it entirely
-    if (radixSegment)
-      route = joinURL(route, radixSegment)
+    if (rou3Segment)
+      route = joinURL(route, rou3Segment)
   }
 
   return route
