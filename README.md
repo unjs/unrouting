@@ -47,7 +47,7 @@ const result = parsePath('users/[id]/profile.vue')
 console.log(result.segments)
 // [
 //   [{ type: 'static', value: 'users' }],
-//   [{ type: 'dynamic', value: 'id' }], 
+//   [{ type: 'dynamic', value: 'id' }],
 //   [{ type: 'static', value: 'profile' }]
 // ]
 console.log(result.modes) // undefined (no modes detected)
@@ -59,16 +59,16 @@ console.log(result.modes) // undefined (no modes detected)
 import { parsePath } from 'unrouting'
 
 // Configure mode detection for .server, .client suffixes
-const result = parsePath('app.server.vue', { 
-  modes: ['server', 'client'] 
+const result = parsePath('app.server.vue', {
+  modes: ['server', 'client']
 })
 
 console.log(result.modes) // ['server']
 console.log(result.segments) // [[{ type: 'static', value: 'app' }]]
 
 // Multiple modes
-const result2 = parsePath('api.server.edge.js', { 
-  modes: ['server', 'client', 'edge'] 
+const result2 = parsePath('api.server.edge.js', {
+  modes: ['server', 'client', 'edge']
 })
 console.log(result2.modes) // ['server', 'edge']
 console.log(result2.segments) // [[{ type: 'static', value: 'api' }]]
@@ -77,7 +77,7 @@ console.log(result2.segments) // [[{ type: 'static', value: 'api' }]]
 ### Convert to Router Formats
 
 ```js
-import { parsePath, toVueRouter4, toRou3, toRegExp } from 'unrouting'
+import { parsePath, toRegExp, toRou3, toVueRouter4 } from 'unrouting'
 
 const result = parsePath('users/[id]/posts/[slug].vue')
 const segments = result.segments
@@ -86,7 +86,7 @@ const segments = result.segments
 const vueRoute = toVueRouter4(segments)
 console.log(vueRoute.path) // '/users/:id()/posts/:slug()'
 
-// Rou3/Nitro format  
+// Rou3/Nitro format
 const nitroRoute = toRou3(segments)
 console.log(nitroRoute) // '/users/:id/posts/:slug'
 
@@ -111,7 +111,7 @@ const catchall = parsePath('docs/[...slug].vue')
 // catchall.segments converts to /docs/:slug(.*)*
 
 // Optional parameters
-const optional = parsePath('products/[[category]]/[[id]].vue') 
+const optional = parsePath('products/[[category]]/[[id]].vue')
 // optional.segments converts to /products/:category?/:id?
 ```
 
