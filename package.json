@@ -25,7 +25,7 @@
     "prepublishOnly": "pnpm lint && pnpm test",
     "release": "pnpm test && bumpp && npm publish",
     "test": "pnpm test:unit && pnpm test:types",
-    "test:unit": "vitest",
+    "test:unit": "vitest run",
     "test:types": "tsc --noEmit"
   },
   "dependencies": {
