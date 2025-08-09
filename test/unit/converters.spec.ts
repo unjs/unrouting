@@ -83,10 +83,11 @@ describe('regexp support', () => {
 
   it('toRegExp', () => {
     const result = Object.fromEntries(Object.entries(paths).map(([path, example]) => {
-      const result = example.match(toRegExp(path))
+      const regexpResult = toRegExp(path)
+      const match = example.match(regexpResult.pattern)
       return [path, {
-        regexp: toRegExp(path).toString(),
-        result: result?.groups || result?.[0],
+        regexp: regexpResult.pattern.toString(),
+        result: match?.groups || match?.[0],
       }]
     }))
     expect(result).toMatchInlineSnapshot(`

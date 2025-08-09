@@ -1,7 +1,7 @@
-import type { ParsedPath } from './parse'
 import escapeStringRegexp from 'escape-string-regexp'
 
 import { encodePath, joinURL } from 'ufo'
+import type { ParsedPathSegment } from './parse'
 import { parsePath } from './parse'
 
 /**
@@ -17,12 +17,15 @@ import { parsePath } from './parse'
 /**
  * TODO: need to implement protection logging + fall back to what radix3 supports.
  */
-export function toRadix3(filePath: string | ParsedPath) {
-  const segments = typeof filePath === 'string' ? parsePath(filePath) : filePath
+export function toRadix3(filePath: string | ParsedPathSegment[]) {
+  const segments = typeof filePath === 'string' ? parsePath(filePath).segments : filePath
 
   let route = '/'
 
   for (const segment of segments) {
+    if (segment.every(token => token.type === 'group'))
+      continue
+
     let radixSegment = ''
     for (const token of segment) {
       if (token.type === 'static')
@@ -39,36 +42,52 @@ export function toRadix3(filePath: string | ParsedPath) {
     }
 
     // If a segment has value '' we skip adding it entirely
-    if (route)
+    if (radixSegment)
       route = joinURL(route, radixSegment)
   }
 
   return route
 }
 
-export function toVueRouter4(filePath: string | ParsedPath) {
-  const segments = typeof filePath === 'string' ? parsePath(filePath) : filePath
+export function toVueRouter4(filePath: string | ParsedPathSegment[]) {
+  const segments = typeof filePath === 'string' ? parsePath(filePath).segments : filePath
 
   let path = '/'
 
-  for (const segment of segments) {
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i]
+
+    // Skip group-only segments as they don't contribute to the URL path
+    if (segment.every(token => token.type === 'group'))
+      continue
+
+    const hasSucceedingSegment = i < segments.length - 1
+
     let pathSegment = ''
     for (const token of segment) {
+      if (token.type === 'group')
+        continue
       if (token.type === 'static') {
         pathSegment += encodePath(token.value).replace(/:/g, '\\:')
         continue
       }
-      if (token.type === 'dynamic')
+      if (token.type === 'dynamic') {
         pathSegment += `:${token.value}()`
-
-      if (token.type === 'optional')
+        continue
+      }
+      if (token.type === 'optional') {
         pathSegment += `:${token.value}?`
-
-      if (token.type === 'catchall')
-        pathSegment += `:${token.value}(.*)*`
+        continue
+      }
+      if (token.type === 'catchall') {
+        pathSegment += hasSucceedingSegment ? `:${token.value}([^/]*)*` : `:${token.value}(.*)*`
+        continue
+      }
     }
 
-    path = joinURL(path, pathSegment)
+    // Only join if pathSegment is not empty
+    if (pathSegment)
+      path = joinURL(path, pathSegment)
   }
 
   return {
@@ -79,28 +98,41 @@ export function toVueRouter4(filePath: string | ParsedPath) {
 function sanitizeCaptureGroup(captureGroup: string) {
   return captureGroup.replace(/^(\d)/, '_$1').replace(/\./g, '')
 }
-export function toRegExp(filePath: string | ParsedPath) {
-  const segments = typeof filePath === 'string' ? parsePath(filePath) : filePath
+export function toRegExp(filePath: string | ParsedPathSegment[]) {
+  const segments = typeof filePath === 'string' ? parsePath(filePath).segments : filePath
 
+  const keys: string[] = []
   let sourceRE = '\\/'
 
   for (const segment of segments) {
+    if (segment.every(token => token.type === 'group'))
+      continue
+
     let reSegment = ''
     for (const token of segment) {
       if (token.type === 'static')
         reSegment += escapeStringRegexp(token.value)
 
-      if (token.type === 'dynamic')
-        reSegment += `(?<${sanitizeCaptureGroup(token.value)}>[^/]+)`
+      if (token.type === 'dynamic') {
+        const key = sanitizeCaptureGroup(token.value)
+        keys.push(key)
+        reSegment += `(?<${key}>[^/]+)`
+      }
 
-      if (token.type === 'optional')
-        reSegment += `(?<${sanitizeCaptureGroup(token.value)}>[^/]*)`
+      if (token.type === 'optional') {
+        const key = sanitizeCaptureGroup(token.value)
+        keys.push(key)
+        reSegment += `(?<${key}>[^/]*)`
+      }
 
-      if (token.type === 'catchall')
-        reSegment += `(?<${sanitizeCaptureGroup(token.value)}>.*)`
+      if (token.type === 'catchall') {
+        const key = sanitizeCaptureGroup(token.value)
+        keys.push(key)
+        reSegment += `(?<${key}>.*)`
+      }
     }
 
-    if (segment.every(token => token.type === 'optional' || token.type === 'catchall')) {
+    if (segment.every(token => token.type === 'optional' || token.type === 'catchall' || token.type === 'group')) {
       sourceRE += `(?:${reSegment}\\/?)`
     }
     else if (reSegment) {
@@ -112,5 +144,8 @@ export function toRegExp(filePath: string | ParsedPath) {
   // make final slash optional
   sourceRE += '?'
 
-  return new RegExp(sourceRE)
+  return {
+    pattern: new RegExp(sourceRE),
+    keys,
+  }
 }
