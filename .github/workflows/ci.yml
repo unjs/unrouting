@@ -26,6 +26,25 @@ jobs:
       - name: 🔠 Lint project
         run: pnpm lint
 
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - name: 📦 Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: 🛠 Build project
+        run: pnpm build
+
+      - name: 🌃 publish nightly release
+        run: pnpm pkg-pr-new publish --compact
+
   test:
     runs-on: ubuntu-latest
 
