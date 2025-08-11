@@ -15,7 +15,7 @@ This library is a work in progress and in active development.
 
 - [ ] generic route parsing function with options to cover major filesystem routing patterns
   - [x] [Nuxt](https://github.com/nuxt/nuxt)
-  - [ ] [unplugin-vue-router](https://github.com/posva/unplugin-vue-router)
+  - [x] [unplugin-vue-router](https://github.com/posva/unplugin-vue-router) (does not include dot-syntax nesting support)
 - [ ] export capability for framework routers
   - [x] RegExp patterns
   - [x] [`vue-router`](https://router.vuejs.org/) routes
@@ -50,7 +50,7 @@ console.log(result.segments)
 //   [{ type: 'dynamic', value: 'id' }],
 //   [{ type: 'static', value: 'profile' }]
 // ]
-console.log(result.modes) // undefined (no modes detected)
+console.log(result.meta) // undefined (no metadata detected)
 ```
 
 ### Mode Detection
@@ -63,15 +63,41 @@ const result = parsePath('app.server.vue', {
   modes: ['server', 'client']
 })
 
-console.log(result.modes) // ['server']
+console.log(result.meta?.modes) // ['server']
 console.log(result.segments) // [[{ type: 'static', value: 'app' }]]
 
 // Multiple modes
 const result2 = parsePath('api.server.edge.js', {
   modes: ['server', 'client', 'edge']
 })
-console.log(result2.modes) // ['server', 'edge']
+console.log(result2.meta?.modes) // ['server', 'edge']
 console.log(result2.segments) // [[{ type: 'static', value: 'api' }]]
+```
+
+### Named Views
+
+```js
+import { parsePath } from 'unrouting'
+
+// Named views with @ suffix (for Vue Router named views)
+const result = parsePath('dashboard@sidebar.vue')
+console.log(result.meta?.name) // 'sidebar'
+console.log(result.segments) // [[{ type: 'static', value: 'dashboard' }]]
+
+// Named views with modes
+const result2 = parsePath('admin@main.client.vue', {
+  modes: ['client', 'server']
+})
+console.log(result2.meta) // { name: 'main', modes: ['client'] }
+
+// Nested named views
+const result3 = parsePath('users/[id]@profile.vue')
+console.log(result3.meta?.name) // 'profile'
+console.log(result3.segments)
+// [
+//   [{ type: 'static', value: 'users' }],
+//   [{ type: 'dynamic', value: 'id' }]
+// ]
 ```
 
 ### Convert to Router Formats
@@ -99,20 +125,39 @@ console.log(regexpRoute.keys) // ['id', 'slug']
 ### Advanced Examples
 
 ```js
-import { parsePath } from 'unrouting'
+import { parsePath, toRegExp, toVueRouter4 } from 'unrouting'
 
-// Group segments (ignored in final path)
-const result = parsePath('(admin)/(dashboard)/users/[id].vue')
-console.log(result.segments)
-// Groups are parsed but skipped in path generation
+// Repeatable parameters ([slug]+.vue -> one or more segments)
+const repeatable = parsePath('posts/[slug]+.vue')
+console.log(toVueRouter4(repeatable.segments).path) // '/posts/:slug+'
 
-// Catchall routes
+// Optional repeatable parameters ([[slug]]+.vue -> zero or more segments)
+const optionalRepeatable = parsePath('articles/[[slug]]+.vue')
+console.log(toVueRouter4(optionalRepeatable.segments).path) // '/articles/:slug*'
+
+// Group segments (ignored in final path, useful for organization)
+const grouped = parsePath('(admin)/(dashboard)/users/[id].vue')
+console.log(toVueRouter4(grouped.segments).path) // '/users/:id()'
+// Groups are parsed but excluded from path generation
+
+// Catchall routes ([...slug].vue -> captures remaining path)
 const catchall = parsePath('docs/[...slug].vue')
-// catchall.segments converts to /docs/:slug(.*)*
+console.log(toVueRouter4(catchall.segments).path) // '/docs/:slug(.*)*'
 
-// Optional parameters
+// Optional parameters ([[param]].vue -> parameter is optional)
 const optional = parsePath('products/[[category]]/[[id]].vue')
-// optional.segments converts to /products/:category?/:id?
+console.log(toVueRouter4(optional.segments).path) // '/products/:category?/:id?'
+
+// Complex mixed patterns
+const complex = parsePath('shop/[category]/product-[id]-[[variant]].vue')
+console.log(toVueRouter4(complex.segments).path)
+// '/shop/:category()/product-:id()-:variant?'
+
+// Proper regex matching with anchoring (fixes partial match issues)
+const pattern = toRegExp('[slug].vue')
+console.log(pattern.pattern) // /^\/(?<slug>[^/]+)\/?$/
+console.log('/file'.match(pattern.pattern)) // ✅ matches
+console.log('/test/thing'.match(pattern.pattern)) // ❌ null (properly rejected)
 ```
 
 ## API
@@ -132,7 +177,10 @@ Parse a file path into route segments with mode detection.
 ```ts
 interface ParsedPath {
   segments: ParsedPathSegment[]
-  modes?: string[]
+  meta?: {
+    modes?: string[] // Detected mode suffixes (e.g., ['client', 'server'])
+    name?: string // Named view from @name suffix
+  }
 }
 ```
 
