@@ -30,7 +30,7 @@ describe('rou3 support', () => {
   it('toRou3', () => {
     const result = Object.fromEntries(Object.entries(paths).map(([path, example]) => {
       const router = createRouter<{ value: string }>()
-      addRoute(router, 'GET', toRou3(path), { value: example })
+      addRoute(router, 'GET', toRou3([path])[0], { value: example })
       const result = findRoute(router, 'GET', example)
       // Return params if available (for dynamic routes), otherwise return the value from data
       return [path, result?.params || result?.data.value]
@@ -86,7 +86,7 @@ describe('regexp support', () => {
 
   it('toRegExp', () => {
     const result = Object.fromEntries(Object.entries(paths).map(([path, example]) => {
-      const regexpResult = toRegExp(path)
+      const regexpResult = toRegExp([path])[0]
       const match = example.match(regexpResult.pattern)
       return [path, {
         regexp: regexpResult.pattern.toString(),
@@ -246,7 +246,7 @@ describe('vue-router support', () => {
 
   it('toVueRouter4', () => {
     const result = Object.fromEntries(Object.entries(paths).map(([path, example]) => {
-      const route = toVueRouter4(path)
+      const route = toVueRouter4([path])[0]
       const router = createVueRouter({
         history: createMemoryHistory(),
         routes: [{
@@ -340,7 +340,7 @@ describe('vue-router support', () => {
 
 describe('toRegExp pattern matching', () => {
   it('should only match exact path patterns', () => {
-    const result = toRegExp('[slug].vue')
+    const [result] = toRegExp(['[slug].vue'])
 
     // Should match single-segment paths
     expect('/file'.match(result.pattern)).toBeTruthy()
@@ -361,7 +361,7 @@ describe('toRegExp pattern matching', () => {
   })
 
   it('should properly match nested dynamic routes', () => {
-    const result = toRegExp('users/[id]/posts/[slug].vue')
+    const [result] = toRegExp(['users/[id]/posts/[slug].vue'])
 
     // Should match the exact pattern
     expect('/users/123/posts/hello'.match(result.pattern)).toBeTruthy()
@@ -380,7 +380,7 @@ describe('toRegExp pattern matching', () => {
   })
 
   it('should handle optional parameters correctly', () => {
-    const result = toRegExp('products/[[category]].vue')
+    const [result] = toRegExp(['products/[[category]].vue'])
 
     // Should match with parameter
     expect('/products/electronics'.match(result.pattern)).toBeTruthy()
@@ -395,7 +395,7 @@ describe('toRegExp pattern matching', () => {
   })
 
   it('should handle catchall routes correctly', () => {
-    const result = toRegExp('docs/[...slug].vue')
+    const [result] = toRegExp(['docs/[...slug].vue'])
 
     // Should match single segment
     expect('/docs/intro'.match(result.pattern)).toBeTruthy()
@@ -414,7 +414,7 @@ describe('toRegExp pattern matching', () => {
   })
 
   it('should handle repeatable parameters correctly', () => {
-    const result = toRegExp('posts/[slug]+.vue')
+    const [result] = toRegExp(['posts/[slug]+.vue'])
 
     // Should match single segment
     expect('/posts/hello'.match(result.pattern)).toBeTruthy()
@@ -430,7 +430,7 @@ describe('toRegExp pattern matching', () => {
   })
 
   it('should handle optional repeatable parameters correctly', () => {
-    const result = toRegExp('articles/[[slug]]+.vue')
+    const [result] = toRegExp(['articles/[[slug]]+.vue'])
 
     // Should match single segment
     expect('/articles/hello'.match(result.pattern)).toBeTruthy()

@@ -42,8 +42,8 @@ pnpm install unrouting
 ```js
 import { parsePath } from 'unrouting'
 
-// Parse a file path into segments with mode detection
-const result = parsePath('users/[id]/profile.vue')
+// Parse file paths into segments with mode detection
+const [result] = parsePath(['users/[id]/profile.vue'])
 console.log(result.segments)
 // [
 //   [{ type: 'static', value: 'users' }],
@@ -59,7 +59,7 @@ console.log(result.meta) // undefined (no metadata detected)
 import { parsePath } from 'unrouting'
 
 // Configure mode detection for .server, .client suffixes
-const result = parsePath('app.server.vue', {
+const [result] = parsePath(['app.server.vue'], {
   modes: ['server', 'client']
 })
 
@@ -67,7 +67,7 @@ console.log(result.meta?.modes) // ['server']
 console.log(result.segments) // [[{ type: 'static', value: 'app' }]]
 
 // Multiple modes
-const result2 = parsePath('api.server.edge.js', {
+const [result2] = parsePath(['api.server.edge.js'], {
   modes: ['server', 'client', 'edge']
 })
 console.log(result2.meta?.modes) // ['server', 'edge']
@@ -80,18 +80,18 @@ console.log(result2.segments) // [[{ type: 'static', value: 'api' }]]
 import { parsePath } from 'unrouting'
 
 // Named views with @ suffix (for Vue Router named views)
-const result = parsePath('dashboard@sidebar.vue')
+const [result] = parsePath(['dashboard@sidebar.vue'])
 console.log(result.meta?.name) // 'sidebar'
 console.log(result.segments) // [[{ type: 'static', value: 'dashboard' }]]
 
 // Named views with modes
-const result2 = parsePath('admin@main.client.vue', {
+const [result2] = parsePath(['admin@main.client.vue'], {
   modes: ['client', 'server']
 })
 console.log(result2.meta) // { name: 'main', modes: ['client'] }
 
 // Nested named views
-const result3 = parsePath('users/[id]@profile.vue')
+const [result3] = parsePath(['users/[id]@profile.vue'])
 console.log(result3.meta?.name) // 'profile'
 console.log(result3.segments)
 // [
@@ -105,21 +105,25 @@ console.log(result3.segments)
 ```js
 import { parsePath, toRegExp, toRou3, toVueRouter4 } from 'unrouting'
 
-const result = parsePath('users/[id]/posts/[slug].vue')
-const segments = result.segments
+const [result] = parsePath(['users/[id]/posts/[slug].vue'])
 
 // Vue Router 4 format
-const vueRoute = toVueRouter4(segments)
+const [vueRoute] = toVueRouter4([result])
 console.log(vueRoute.path) // '/users/:id()/posts/:slug()'
 
 // Rou3/Nitro format
-const nitroRoute = toRou3(segments)
+const [nitroRoute] = toRou3([result])
 console.log(nitroRoute) // '/users/:id/posts/:slug'
 
 // RegExp pattern
-const regexpRoute = toRegExp(segments)
+const [regexpRoute] = toRegExp([result])
 console.log(regexpRoute.pattern) // /^\/users\/([^\/]+)\/posts\/([^\/]+)\/?$/
 console.log(regexpRoute.keys) // ['id', 'slug']
+
+// Or pass file paths directly to converters
+const [vueRoute2] = toVueRouter4(['users/[id]/posts/[slug].vue'])
+const [nitroRoute2] = toRou3(['users/[id]/posts/[slug].vue'])
+const [regexpRoute2] = toRegExp(['users/[id]/posts/[slug].vue'])
 ```
 
 ### Advanced Examples
@@ -128,33 +132,39 @@ console.log(regexpRoute.keys) // ['id', 'slug']
 import { parsePath, toRegExp, toVueRouter4 } from 'unrouting'
 
 // Repeatable parameters ([slug]+.vue -> one or more segments)
-const repeatable = parsePath('posts/[slug]+.vue')
-console.log(toVueRouter4(repeatable.segments).path) // '/posts/:slug+'
+const [repeatable] = parsePath(['posts/[slug]+.vue'])
+const [vueRoute1] = toVueRouter4([repeatable])
+console.log(vueRoute1.path) // '/posts/:slug+'
 
 // Optional repeatable parameters ([[slug]]+.vue -> zero or more segments)
-const optionalRepeatable = parsePath('articles/[[slug]]+.vue')
-console.log(toVueRouter4(optionalRepeatable.segments).path) // '/articles/:slug*'
+const [optionalRepeatable] = parsePath(['articles/[[slug]]+.vue'])
+const [vueRoute2] = toVueRouter4([optionalRepeatable])
+console.log(vueRoute2.path) // '/articles/:slug*'
 
 // Group segments (ignored in final path, useful for organization)
-const grouped = parsePath('(admin)/(dashboard)/users/[id].vue')
-console.log(toVueRouter4(grouped.segments).path) // '/users/:id()'
+const [grouped] = parsePath(['(admin)/(dashboard)/users/[id].vue'])
+const [vueRoute3] = toVueRouter4([grouped])
+console.log(vueRoute3.path) // '/users/:id()'
 // Groups are parsed but excluded from path generation
 
 // Catchall routes ([...slug].vue -> captures remaining path)
-const catchall = parsePath('docs/[...slug].vue')
-console.log(toVueRouter4(catchall.segments).path) // '/docs/:slug(.*)*'
+const [catchall] = parsePath(['docs/[...slug].vue'])
+const [vueRoute4] = toVueRouter4([catchall])
+console.log(vueRoute4.path) // '/docs/:slug(.*)*'
 
 // Optional parameters ([[param]].vue -> parameter is optional)
-const optional = parsePath('products/[[category]]/[[id]].vue')
-console.log(toVueRouter4(optional.segments).path) // '/products/:category?/:id?'
+const [optional] = parsePath(['products/[[category]]/[[id]].vue'])
+const [vueRoute5] = toVueRouter4([optional])
+console.log(vueRoute5.path) // '/products/:category?/:id?'
 
 // Complex mixed patterns
-const complex = parsePath('shop/[category]/product-[id]-[[variant]].vue')
-console.log(toVueRouter4(complex.segments).path)
+const [complex] = parsePath(['shop/[category]/product-[id]-[[variant]].vue'])
+const [vueRoute6] = toVueRouter4([complex])
+console.log(vueRoute6.path)
 // '/shop/:category()/product-:id()-:variant?'
 
 // Proper regex matching with anchoring (fixes partial match issues)
-const pattern = toRegExp('[slug].vue')
+const [pattern] = toRegExp(['[slug].vue'])
 console.log(pattern.pattern) // /^\/(?<slug>[^/]+)\/?$/
 console.log('/file'.match(pattern.pattern)) // ✅ matches
 console.log('/test/thing'.match(pattern.pattern)) // ❌ null (properly rejected)
@@ -162,18 +172,18 @@ console.log('/test/thing'.match(pattern.pattern)) // ❌ null (properly rejected
 
 ## API
 
-### `parsePath(filePath, options?)`
+### `parsePath(filePaths, options?)`
 
-Parse a file path into route segments with mode detection.
+Parse file paths into route segments with mode detection.
 
 **Parameters:**
-- `filePath` (string): The file path to parse
+- `filePaths` (string[]): Array of file paths to parse
 - `options` (object, optional):
   - `extensions` (string[]): File extensions to strip (default: all extensions)
   - `modes` (string[]): Mode suffixes to detect (e.g., `['server', 'client']`)
   - `warn` (function): Warning callback for invalid characters
 
-**Returns:** `ParsedPath`
+**Returns:** `ParsedPath[]`
 ```ts
 interface ParsedPath {
   segments: ParsedPathSegment[]
@@ -184,32 +194,32 @@ interface ParsedPath {
 }
 ```
 
-### `toVueRouter4(segments)`
+### `toVueRouter4(filePaths)`
 
-Convert parsed segments to Vue Router 4 format.
-
-**Parameters:**
-- `segments` (ParsedPathSegment[]): The segments from `parsePath().segments`
-
-**Returns:** `{ path: string }`
-
-### `toRou3(segments)`
-
-Convert parsed segments to Rou3/Nitro format.
+Convert parsed segments or file paths to Vue Router 4 format.
 
 **Parameters:**
-- `segments` (ParsedPathSegment[]): The segments from `parsePath().segments`
+- `filePaths` (string[] | ParsedPath[]): Array of file paths or parsed path objects
 
-**Returns:** `string`
+**Returns:** `Array<{ path: string }>`
 
-### `toRegExp(segments)`
+### `toRou3(filePaths)`
 
-Convert parsed segments to RegExp pattern.
+Convert parsed segments or file paths to Rou3/Nitro format.
 
 **Parameters:**
-- `segments` (ParsedPathSegment[]): The segments from `parsePath().segments`
+- `filePaths` (string[] | ParsedPath[]): Array of file paths or parsed path objects
 
-**Returns:** `{ pattern: RegExp, keys: string[] }`
+**Returns:** `string[]`
+
+### `toRegExp(filePaths)`
+
+Convert parsed segments or file paths to RegExp patterns.
+
+**Parameters:**
+- `filePaths` (string[] | ParsedPath[]): Array of file paths or parsed path objects
+
+**Returns:** `Array<{ pattern: RegExp, keys: string[] }>`
 
 ## 💻 Development
 

@@ -28,57 +28,64 @@ export interface ParsePathOptions {
   modes?: string[]
 }
 
-export function parsePath(filePath: string, options: ParsePathOptions = {}): ParsedPath {
+export function parsePath(filePaths: string[], options: ParsePathOptions = {}): ParsedPath[] {
   // remove file extensions (allow-listed if `options.extensions` is specified)
   const EXT_RE = options.extensions
     ? new RegExp(`\\.(${options.extensions.map(ext => ext.replace(/^\./, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`)
     : /\.\w+$/
-  filePath = filePath.replace(EXT_RE, '')
 
-  // detect named views (@ suffix before modes/extensions)
-  let namedView: string | undefined
-  const namedViewMatch = filePath.match(/@([\w-]+)(?:\.|$)/)
-  if (namedViewMatch) {
-    namedView = namedViewMatch[1]
-    filePath = filePath.replace(/@[\w-]+/, '')
-  }
+  const parsedPaths: ParsedPath[] = []
 
-  // detect modes
-  const modes: string[] = []
-  const supportedModes = options.modes || [] // no default modes
+  for (let filePath of filePaths) {
+    filePath = filePath.replace(EXT_RE, '')
 
-  // Extract modes from right to left to handle multiple modes like "file.client.vapor"
-  let remainingPath = filePath
-  let foundMode = true
+    // detect named views (@ suffix before modes/extensions)
+    let namedView: string | undefined
+    const namedViewMatch = filePath.match(/@([\w-]+)(?:\.|$)/)
+    if (namedViewMatch) {
+      namedView = namedViewMatch[1]
+      filePath = filePath.replace(/@[\w-]+/, '')
+    }
 
-  while (foundMode) {
-    foundMode = false
-    for (const mode of supportedModes) {
-      const modePattern = new RegExp(`\\.${mode}$`)
-      if (modePattern.test(remainingPath)) {
-        modes.unshift(mode) // Add to front to maintain left-to-right order
-        remainingPath = remainingPath.replace(modePattern, '')
-        foundMode = true
-        break
+    // detect modes
+    const modes: string[] = []
+    const supportedModes = options.modes || [] // no default modes
+
+    // Extract modes from right to left to handle multiple modes like "file.client.vapor"
+    let remainingPath = filePath
+    let foundMode = true
+
+    while (foundMode) {
+      foundMode = false
+      for (const mode of supportedModes) {
+        const modePattern = new RegExp(`\\.${mode}$`)
+        if (modePattern.test(remainingPath)) {
+          modes.unshift(mode) // Add to front to maintain left-to-right order
+          remainingPath = remainingPath.replace(modePattern, '')
+          foundMode = true
+          break
+        }
       }
     }
+
+    filePath = remainingPath
+
+    // add leading slash and remove trailing slash: test/ -> /test
+    const segments = withoutLeadingSlash(withoutTrailingSlash(filePath)).split('/')
+
+    const meta: { modes?: string[], name?: string } = {}
+    if (modes.length > 0)
+      meta.modes = modes
+    if (namedView)
+      meta.name = namedView
+
+    parsedPaths.push({
+      segments: segments.map(s => parseSegment(s, filePath, options.warn)),
+      meta: Object.keys(meta).length > 0 ? meta : undefined,
+    })
   }
 
-  filePath = remainingPath
-
-  // add leading slash and remove trailing slash: test/ -> /test
-  const segments = withoutLeadingSlash(withoutTrailingSlash(filePath)).split('/')
-
-  const meta: { modes?: string[], name?: string } = {}
-  if (modes.length > 0)
-    meta.modes = modes
-  if (namedView)
-    meta.name = namedView
-
-  return {
-    segments: segments.map(s => parseSegment(s, filePath, options.warn)),
-    meta: Object.keys(meta).length > 0 ? meta : undefined,
-  }
+  return parsedPaths
 }
 
 const PARAM_CHAR_RE = /[\w.]/
