@@ -34,7 +34,7 @@ describe('parsing vue file paths', () => {
     for (const path of errors) {
       let err
       try {
-        parsePath(path)
+        parsePath([path])
       }
       catch (e) {
         err = e
@@ -44,7 +44,7 @@ describe('parsing vue file paths', () => {
   })
 
   it('works', () => {
-    const result = Object.fromEntries(paths.map(path => [path, parsePath(path)]))
+    const result = Object.fromEntries(paths.map(path => [path, parsePath([path])[0]]))
     expect(result).toMatchInlineSnapshot(`
       {
         "[...slug].vue": {
@@ -365,57 +365,57 @@ describe('parsing vue file paths', () => {
 
 describe('parseFile function', () => {
   it('detects server mode when configured', () => {
-    const result = parsePath('app.server.vue', { modes: ['server', 'client'] })
-    expect(result.meta?.modes).toEqual(['server'])
-    expect(result.segments).toEqual([[{ type: 'static', value: 'app' }]])
+    const result = parsePath(['app.server.vue'], { modes: ['server', 'client'] })
+    expect(result[0].meta?.modes).toEqual(['server'])
+    expect(result[0].segments).toEqual([[{ type: 'static', value: 'app' }]])
   })
 
   it('detects client mode when configured', () => {
-    const result = parsePath('app.client.vue', { modes: ['server', 'client'] })
-    expect(result.meta?.modes).toEqual(['client'])
-    expect(result.segments).toEqual([[{ type: 'static', value: 'app' }]])
+    const result = parsePath(['app.client.vue'], { modes: ['server', 'client'] })
+    expect(result[0].meta?.modes).toEqual(['client'])
+    expect(result[0].segments).toEqual([[{ type: 'static', value: 'app' }]])
   })
 
   it('has no modes for regular files', () => {
-    const result = parsePath('app.vue')
-    expect(result.meta?.modes).toBeUndefined()
-    expect(result.segments).toEqual([[{ type: 'static', value: 'app' }]])
+    const result = parsePath(['app.vue'])
+    expect(result[0].meta?.modes).toBeUndefined()
+    expect(result[0].segments).toEqual([[{ type: 'static', value: 'app' }]])
   })
 
   it('ignores mode-like extensions without configuration', () => {
-    const result = parsePath('app.server.vue')
-    expect(result.meta?.modes).toBeUndefined()
-    expect(result.segments).toEqual([[{ type: 'static', value: 'app.server' }]])
+    const result = parsePath(['app.server.vue'])
+    expect(result[0].meta?.modes).toBeUndefined()
+    expect(result[0].segments).toEqual([[{ type: 'static', value: 'app.server' }]])
   })
 
   it('detects multiple modes in correct order', () => {
-    const result = parsePath('app.client.vapor.vue', { modes: ['client', 'server', 'vapor'] })
-    expect(result.meta?.modes).toEqual(['client', 'vapor'])
-    expect(result.segments).toEqual([[{ type: 'static', value: 'app' }]])
+    const result = parsePath(['app.client.vapor.vue'], { modes: ['client', 'server', 'vapor'] })
+    expect(result[0].meta?.modes).toEqual(['client', 'vapor'])
+    expect(result[0].segments).toEqual([[{ type: 'static', value: 'app' }]])
   })
 
   it('detects custom modes', () => {
-    const result = parsePath('app.mobile.vue', { modes: ['mobile', 'desktop'] })
-    expect(result.meta?.modes).toEqual(['mobile'])
-    expect(result.segments).toEqual([[{ type: 'static', value: 'app' }]])
+    const result = parsePath(['app.mobile.vue'], { modes: ['mobile', 'desktop'] })
+    expect(result[0].meta?.modes).toEqual(['mobile'])
+    expect(result[0].segments).toEqual([[{ type: 'static', value: 'app' }]])
   })
 
   it('detects multiple custom modes', () => {
-    const result = parsePath('admin.desktop.dark.vue', { modes: ['mobile', 'desktop', 'dark', 'light'] })
-    expect(result.meta?.modes).toEqual(['desktop', 'dark'])
-    expect(result.segments).toEqual([[{ type: 'static', value: 'admin' }]])
+    const result = parsePath(['admin.desktop.dark.vue'], { modes: ['mobile', 'desktop', 'dark', 'light'] })
+    expect(result[0].meta?.modes).toEqual(['desktop', 'dark'])
+    expect(result[0].segments).toEqual([[{ type: 'static', value: 'admin' }]])
   })
 
   it('ignores unknown modes', () => {
-    const result = parsePath('app.unknown.vue', { modes: ['client', 'server'] })
-    expect(result.meta?.modes).toBeUndefined()
-    expect(result.segments).toEqual([[{ type: 'static', value: 'app.unknown' }]])
+    const result = parsePath(['app.unknown.vue'], { modes: ['client', 'server'] })
+    expect(result[0].meta?.modes).toBeUndefined()
+    expect(result[0].segments).toEqual([[{ type: 'static', value: 'app.unknown' }]])
   })
 
   it('works with empty modes array', () => {
-    const result = parsePath('app.client.vue', { modes: [] })
-    expect(result.meta?.modes).toBeUndefined()
-    expect(result.segments).toEqual([[{ type: 'static', value: 'app.client' }]])
+    const result = parsePath(['app.client.vue'], { modes: [] })
+    expect(result[0].meta?.modes).toBeUndefined()
+    expect(result[0].segments).toEqual([[{ type: 'static', value: 'app.client' }]])
   })
 })
 
@@ -444,7 +444,7 @@ describe('group segments', () => {
 
 describe('multiple extensions support', () => {
   it('handles custom extensions', () => {
-    expect(parsePath('api/users.json', { extensions: ['.vue', '.json'] })).toMatchObject({
+    expect(parsePath(['api/users.json'], { extensions: ['.vue', '.json'] })[0]).toMatchObject({
       segments: [
         [{ type: 'static', value: 'api' }],
         [{ type: 'static', value: 'users' }],
@@ -453,7 +453,7 @@ describe('multiple extensions support', () => {
   })
 
   it('preserves extensions not in allow list', () => {
-    expect(parsePath('api/users.xml', { extensions: ['.vue', '.json'] })).toMatchObject({
+    expect(parsePath(['api/users.xml'], { extensions: ['.vue', '.json'] })[0]).toMatchObject({
       segments: [
         [{ type: 'static', value: 'api' }],
         [{ type: 'static', value: 'users.xml' }],
@@ -462,7 +462,7 @@ describe('multiple extensions support', () => {
   })
 
   it('strips all extensions when no extensions specified', () => {
-    expect(parsePath('api/users.xml')).toMatchObject({
+    expect(parsePath(['api/users.xml'])[0]).toMatchObject({
       segments: [
         [{ type: 'static', value: 'api' }],
         [{ type: 'static', value: 'users' }],
