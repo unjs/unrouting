@@ -336,6 +336,24 @@ describe('vue-router support', () => {
       }
     `)
   })
+
+  it('should handle catchall patterns', () => {
+    const patterns = [
+      '[...slug].vue',
+      'prefix/[...slug].vue',
+      '[...slug]/suffix.vue',
+      'prefix/[...slug]/suffix.vue',
+    ]
+    const result = toVueRouter4(patterns)
+    expect(result.map(m => m.path)).toMatchInlineSnapshot(`
+      [
+        "/:slug(.*)*",
+        "/prefix/:slug(.*)*",
+        "/:slug([^/]*)*/suffix",
+        "/prefix/:slug([^/]*)*/suffix",
+      ]
+    `)
+  })
 })
 
 describe('toRegExp pattern matching', () => {
