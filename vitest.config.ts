@@ -11,8 +11,10 @@ export default defineConfig({
   },
   test: {
     coverage: {
+      enabled: true,
       include: ['src'],
       reporter: ['text', 'json', 'html'],
+      thresholds: { 100: true },
     },
   },
 })

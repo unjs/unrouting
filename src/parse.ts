@@ -121,12 +121,7 @@ export function parseSegment(segment: string, absolutePath?: string, warn?: (mes
   let buffer = ''
   const tokens: ParsedPathSegmentToken[] = []
 
-  function consumeBuffer() {
-    if (!buffer)
-      return
-    if (state === 'initial')
-      throw new Error('wrong state')
-
+  function consumeBuffer(state: Exclude<SegmentType, 'initial'>) {
     tokens.push({
       type: state,
       value: buffer,
@@ -155,11 +150,11 @@ export function parseSegment(segment: string, absolutePath?: string, warn?: (mes
 
       case 'static':
         if (c === '[') {
-          consumeBuffer()
+          consumeBuffer(state)
           state = 'dynamic'
         }
         else if (c === '(') {
-          consumeBuffer()
+          consumeBuffer(state)
           state = 'group'
         }
         else {
@@ -202,7 +197,7 @@ export function parseSegment(segment: string, absolutePath?: string, warn?: (mes
             i++ // skip the + character
           }
           else {
-            consumeBuffer()
+            consumeBuffer(state)
           }
 
           state = 'initial'
@@ -211,7 +206,7 @@ export function parseSegment(segment: string, absolutePath?: string, warn?: (mes
           if (!buffer)
             throw new Error('Empty group')
           else
-            consumeBuffer()
+            consumeBuffer(state)
 
           state = 'initial'
         }
@@ -233,7 +228,9 @@ export function parseSegment(segment: string, absolutePath?: string, warn?: (mes
   if (state === 'group')
     throw new Error(`Unfinished group "${buffer}"`)
 
-  consumeBuffer()
+  if (state !== 'initial' && buffer) {
+    consumeBuffer(state)
+  }
 
   if (tokens.length === 1 && tokens[0].type === 'static' && tokens[0].value === 'index')
     tokens[0].value = ''

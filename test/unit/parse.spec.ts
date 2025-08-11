@@ -43,6 +43,109 @@ describe('parsing vue file paths', () => {
     }
   })
 
+  it('should handle empty strings', () => {
+    const [result] = parsePath([''])
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "meta": undefined,
+        "segments": [
+          [],
+          [],
+        ],
+      }
+    `)
+  })
+
+  it('should handle group tokens in parsing', () => {
+    const [pure, mixed] = parsePath(['(group).vue', '(group)[slug].vue'])
+    expect(pure.segments[0]).toEqual([
+      { type: 'group', value: 'group' },
+    ])
+    expect(mixed.segments).toEqual([[
+      { type: 'group', value: 'group' },
+      { type: 'dynamic', value: 'slug' },
+    ]])
+  })
+
+  it('should handle mixed static and dynamic content', () => {
+    const result = parsePath(['prefix-[slug]-suffix.vue'])
+    expect(result[0].segments[0]).toEqual([
+      { type: 'static', value: 'prefix-' },
+      { type: 'dynamic', value: 'slug' },
+      { type: 'static', value: '-suffix' },
+    ])
+  })
+
+  it('should handle edge cases in token parsing', () => {
+    // Test parsing with group followed by dynamic
+    const result1 = parsePath(['(group)[slug].vue'])
+    expect(result1[0].segments[0]).toEqual([
+      { type: 'group', value: 'group' },
+      { type: 'dynamic', value: 'slug' },
+    ])
+
+    // Test parsing with static content followed by group
+    const result2 = parsePath(['static(group).vue'])
+    expect(result2[0].segments[0]).toEqual([
+      { type: 'static', value: 'static' },
+      { type: 'group', value: 'group' },
+    ])
+  })
+
+  it('should handle complex static content scenarios', () => {
+    // Test different static content patterns that would exercise the static state
+    const result1 = parsePath(['file.with.dots.vue'])
+    expect(result1[0].segments[0]).toEqual([
+      { type: 'static', value: 'file.with.dots' },
+    ])
+
+    // Test static content with underscores and hyphens
+    const result2 = parsePath(['file-with_underscores.vue'])
+    expect(result2[0].segments[0]).toEqual([
+      { type: 'static', value: 'file-with_underscores' },
+    ])
+
+    // Test static content with numbers
+    const result3 = parsePath(['file123with456numbers.vue'])
+    expect(result3[0].segments[0]).toEqual([
+      { type: 'static', value: 'file123with456numbers' },
+    ])
+  })
+
+  it('should warn about invalid characters in dynamic parameters', () => {
+    const warnings: string[] = []
+    const warn = (message: string) => warnings.push(message)
+
+    // Test invalid characters in dynamic parameters
+    parsePath(['[param#invalid].vue'], { warn })
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toMatch('\'#\' is not allowed in a dynamic route parameter')
+  })
+
+  it('should handle parseSegment with warn function properly', () => {
+    const warnings: string[] = []
+    const warn = (message: string) => warnings.push(message)
+
+    // Test with optional parameter and invalid character
+    parsePath(['[[param&invalid]].vue'], { warn })
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain('is not allowed in a dynamic route parameter')
+  })
+
+  it('should handle parseSegment function directly', () => {
+    // Test parseSegment with a simple segment
+    const result1 = parseSegment('simple')
+    expect(result1).toEqual([{ type: 'static', value: 'simple' }])
+
+    // Test parseSegment with dynamic content
+    const result2 = parseSegment('[param]')
+    expect(result2).toEqual([{ type: 'dynamic', value: 'param' }])
+
+    // Test parseSegment with empty segment
+    const result3 = parseSegment('')
+    expect(result3).toEqual([])
+  })
+
   it('works', () => {
     const result = Object.fromEntries(paths.map(path => [path, parsePath([path])[0]]))
     expect(result).toMatchInlineSnapshot(`
