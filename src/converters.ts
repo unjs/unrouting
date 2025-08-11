@@ -37,6 +37,12 @@ export function toRou3(filePath: string | ParsedPathSegment[]) {
       if (token.type === 'optional')
         throw new TypeError('[unrouting] `toRou3` does not support optional parameters')
 
+      if (token.type === 'repeatable')
+        throw new TypeError('[unrouting] `toRou3` does not support repeatable parameters')
+
+      if (token.type === 'optional-repeatable')
+        throw new TypeError('[unrouting] `toRou3` does not support optional repeatable parameters')
+
       if (token.type === 'catchall')
         rou3Segment += token.value ? `**:${token.value}` : '**'
     }
@@ -79,6 +85,14 @@ export function toVueRouter4(filePath: string | ParsedPathSegment[]) {
         pathSegment += `:${token.value}?`
         continue
       }
+      if (token.type === 'repeatable') {
+        pathSegment += `:${token.value}+`
+        continue
+      }
+      if (token.type === 'optional-repeatable') {
+        pathSegment += `:${token.value}*`
+        continue
+      }
       if (token.type === 'catchall') {
         pathSegment += hasSucceedingSegment ? `:${token.value}([^/]*)*` : `:${token.value}(.*)*`
         continue
@@ -102,9 +116,11 @@ export function toRegExp(filePath: string | ParsedPathSegment[]) {
   const segments = typeof filePath === 'string' ? parsePath(filePath).segments : filePath
 
   const keys: string[] = []
-  let sourceRE = '\\/'
+  let sourceRE = '^'
 
-  for (const segment of segments) {
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i]
+
     if (segment.every(token => token.type === 'group'))
       continue
 
@@ -125,6 +141,18 @@ export function toRegExp(filePath: string | ParsedPathSegment[]) {
         reSegment += `(?<${key}>[^/]*)`
       }
 
+      if (token.type === 'repeatable') {
+        const key = sanitizeCaptureGroup(token.value)
+        keys.push(key)
+        reSegment += `(?<${key}>[^/]+(?:/[^/]+)*)`
+      }
+
+      if (token.type === 'optional-repeatable') {
+        const key = sanitizeCaptureGroup(token.value)
+        keys.push(key)
+        reSegment += `(?<${key}>[^/]*(?:/[^/]+)*)`
+      }
+
       if (token.type === 'catchall') {
         const key = sanitizeCaptureGroup(token.value)
         keys.push(key)
@@ -132,17 +160,25 @@ export function toRegExp(filePath: string | ParsedPathSegment[]) {
       }
     }
 
-    if (segment.every(token => token.type === 'optional' || token.type === 'catchall' || token.type === 'group')) {
-      sourceRE += `(?:${reSegment}\\/?)`
-    }
-    else if (reSegment) {
-      // If a segment has value '' we skip adding a trailing slash
-      sourceRE += `${reSegment}\\/`
+    // Check if the entire segment is optional (contains only optional, catchall, or optional-repeatable tokens, or groups)
+    const isOptionalSegment = segment.every(token =>
+      token.type === 'optional'
+      || token.type === 'catchall'
+      || token.type === 'group'
+      || token.type === 'optional-repeatable',
+    )
+
+    // Add slash and segment content
+    if (reSegment) {
+      if (isOptionalSegment)
+        sourceRE += `(?:\\/${reSegment})?`
+      else
+        sourceRE += `\\/${reSegment}`
     }
   }
 
-  // make final slash optional
-  sourceRE += '?'
+  // Add optional trailing slash and end anchor
+  sourceRE += '\\/?$'
 
   return {
     pattern: new RegExp(sourceRE),

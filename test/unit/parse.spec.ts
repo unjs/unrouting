@@ -19,6 +19,11 @@ describe('parsing vue file paths', () => {
     '[[c3@3c]].vue',
     '[[d4-4d]].vue',
     'test:name.vue',
+    '[slug]+.vue',
+    '[[slug]]+.vue',
+    'articles/[slug]+.vue',
+    'index@sidebar.vue',
+    'users/[id]@aside.vue',
   ]
   const errors = [
     '[slug.vue',
@@ -43,7 +48,7 @@ describe('parsing vue file paths', () => {
     expect(result).toMatchInlineSnapshot(`
       {
         "[...slug].vue": {
-          "modes": undefined,
+          "meta": undefined,
           "segments": [
             [
               {
@@ -54,7 +59,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "[[c3@3c]].vue": {
-          "modes": undefined,
+          "meta": undefined,
           "segments": [
             [
               {
@@ -65,7 +70,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "[[d4-4d]].vue": {
-          "modes": undefined,
+          "meta": undefined,
           "segments": [
             [
               {
@@ -76,7 +81,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "[[foo]]/index.vue": {
-          "modes": undefined,
+          "meta": undefined,
           "segments": [
             [
               {
@@ -92,8 +97,19 @@ describe('parsing vue file paths', () => {
             ],
           ],
         },
+        "[[slug]]+.vue": {
+          "meta": undefined,
+          "segments": [
+            [
+              {
+                "type": "optional-repeatable",
+                "value": "slug",
+              },
+            ],
+          ],
+        },
         "[[sub]]/route-[slug].vue": {
-          "modes": undefined,
+          "meta": undefined,
           "segments": [
             [
               {
@@ -114,7 +130,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "[a1_1a].vue": {
-          "modes": undefined,
+          "meta": undefined,
           "segments": [
             [
               {
@@ -125,7 +141,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "[b2.2b].vue": {
-          "modes": undefined,
+          "meta": undefined,
           "segments": [
             [
               {
@@ -136,7 +152,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "[b2]_[2b].vue": {
-          "modes": undefined,
+          "meta": undefined,
           "segments": [
             [
               {
@@ -154,8 +170,19 @@ describe('parsing vue file paths', () => {
             ],
           ],
         },
+        "[slug]+.vue": {
+          "meta": undefined,
+          "segments": [
+            [
+              {
+                "type": "repeatable",
+                "value": "slug",
+              },
+            ],
+          ],
+        },
         "[slug].vue": {
-          "modes": undefined,
+          "meta": undefined,
           "segments": [
             [
               {
@@ -165,8 +192,25 @@ describe('parsing vue file paths', () => {
             ],
           ],
         },
+        "articles/[slug]+.vue": {
+          "meta": undefined,
+          "segments": [
+            [
+              {
+                "type": "static",
+                "value": "articles",
+              },
+            ],
+            [
+              {
+                "type": "repeatable",
+                "value": "slug",
+              },
+            ],
+          ],
+        },
         "file.vue": {
-          "modes": undefined,
+          "meta": undefined,
           "segments": [
             [
               {
@@ -176,8 +220,21 @@ describe('parsing vue file paths', () => {
             ],
           ],
         },
+        "index@sidebar.vue": {
+          "meta": {
+            "name": "sidebar",
+          },
+          "segments": [
+            [
+              {
+                "type": "static",
+                "value": "",
+              },
+            ],
+          ],
+        },
         "optional/[[opt]]-postfix.vue": {
-          "modes": undefined,
+          "meta": undefined,
           "segments": [
             [
               {
@@ -198,7 +255,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "optional/[[opt]].vue": {
-          "modes": undefined,
+          "meta": undefined,
           "segments": [
             [
               {
@@ -215,7 +272,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "optional/prefix-[[opt]]-postfix.vue": {
-          "modes": undefined,
+          "meta": undefined,
           "segments": [
             [
               {
@@ -240,7 +297,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "optional/prefix-[[opt]].vue": {
-          "modes": undefined,
+          "meta": undefined,
           "segments": [
             [
               {
@@ -261,7 +318,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "test.html.vue": {
-          "modes": undefined,
+          "meta": undefined,
           "segments": [
             [
               {
@@ -272,12 +329,31 @@ describe('parsing vue file paths', () => {
           ],
         },
         "test:name.vue": {
-          "modes": undefined,
+          "meta": undefined,
           "segments": [
             [
               {
                 "type": "static",
                 "value": "test:name",
+              },
+            ],
+          ],
+        },
+        "users/[id]@aside.vue": {
+          "meta": {
+            "name": "aside",
+          },
+          "segments": [
+            [
+              {
+                "type": "static",
+                "value": "users",
+              },
+            ],
+            [
+              {
+                "type": "dynamic",
+                "value": "id",
               },
             ],
           ],
@@ -290,55 +366,55 @@ describe('parsing vue file paths', () => {
 describe('parseFile function', () => {
   it('detects server mode when configured', () => {
     const result = parsePath('app.server.vue', { modes: ['server', 'client'] })
-    expect(result.modes).toEqual(['server'])
+    expect(result.meta?.modes).toEqual(['server'])
     expect(result.segments).toEqual([[{ type: 'static', value: 'app' }]])
   })
 
   it('detects client mode when configured', () => {
     const result = parsePath('app.client.vue', { modes: ['server', 'client'] })
-    expect(result.modes).toEqual(['client'])
+    expect(result.meta?.modes).toEqual(['client'])
     expect(result.segments).toEqual([[{ type: 'static', value: 'app' }]])
   })
 
   it('has no modes for regular files', () => {
     const result = parsePath('app.vue')
-    expect(result.modes).toBeUndefined()
+    expect(result.meta?.modes).toBeUndefined()
     expect(result.segments).toEqual([[{ type: 'static', value: 'app' }]])
   })
 
   it('ignores mode-like extensions without configuration', () => {
     const result = parsePath('app.server.vue')
-    expect(result.modes).toBeUndefined()
+    expect(result.meta?.modes).toBeUndefined()
     expect(result.segments).toEqual([[{ type: 'static', value: 'app.server' }]])
   })
 
   it('detects multiple modes in correct order', () => {
     const result = parsePath('app.client.vapor.vue', { modes: ['client', 'server', 'vapor'] })
-    expect(result.modes).toEqual(['client', 'vapor'])
+    expect(result.meta?.modes).toEqual(['client', 'vapor'])
     expect(result.segments).toEqual([[{ type: 'static', value: 'app' }]])
   })
 
   it('detects custom modes', () => {
     const result = parsePath('app.mobile.vue', { modes: ['mobile', 'desktop'] })
-    expect(result.modes).toEqual(['mobile'])
+    expect(result.meta?.modes).toEqual(['mobile'])
     expect(result.segments).toEqual([[{ type: 'static', value: 'app' }]])
   })
 
   it('detects multiple custom modes', () => {
     const result = parsePath('admin.desktop.dark.vue', { modes: ['mobile', 'desktop', 'dark', 'light'] })
-    expect(result.modes).toEqual(['desktop', 'dark'])
+    expect(result.meta?.modes).toEqual(['desktop', 'dark'])
     expect(result.segments).toEqual([[{ type: 'static', value: 'admin' }]])
   })
 
   it('ignores unknown modes', () => {
     const result = parsePath('app.unknown.vue', { modes: ['client', 'server'] })
-    expect(result.modes).toBeUndefined()
+    expect(result.meta?.modes).toBeUndefined()
     expect(result.segments).toEqual([[{ type: 'static', value: 'app.unknown' }]])
   })
 
   it('works with empty modes array', () => {
     const result = parsePath('app.client.vue', { modes: [] })
-    expect(result.modes).toBeUndefined()
+    expect(result.meta?.modes).toBeUndefined()
     expect(result.segments).toEqual([[{ type: 'static', value: 'app.client' }]])
   })
 })
@@ -363,5 +439,34 @@ describe('group segments', () => {
 
   it('throws error for unfinished groups', () => {
     expect(() => parseSegment('(unfinished')).toThrow('Unfinished group')
+  })
+})
+
+describe('multiple extensions support', () => {
+  it('handles custom extensions', () => {
+    expect(parsePath('api/users.json', { extensions: ['.vue', '.json'] })).toMatchObject({
+      segments: [
+        [{ type: 'static', value: 'api' }],
+        [{ type: 'static', value: 'users' }],
+      ],
+    })
+  })
+
+  it('preserves extensions not in allow list', () => {
+    expect(parsePath('api/users.xml', { extensions: ['.vue', '.json'] })).toMatchObject({
+      segments: [
+        [{ type: 'static', value: 'api' }],
+        [{ type: 'static', value: 'users.xml' }],
+      ],
+    })
+  })
+
+  it('strips all extensions when no extensions specified', () => {
+    expect(parsePath('api/users.xml')).toMatchObject({
+      segments: [
+        [{ type: 'static', value: 'api' }],
+        [{ type: 'static', value: 'users' }],
+      ],
+    })
   })
 })

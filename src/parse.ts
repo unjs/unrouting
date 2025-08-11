@@ -30,8 +30,18 @@ export interface ParsePathOptions {
 
 export function parsePath(filePath: string, options: ParsePathOptions = {}): ParsedPath {
   // remove file extensions (allow-listed if `options.extensions` is specified)
-  const EXT_RE = options.extensions ? new RegExp(`\\.(${options.extensions.join('|')})$`) : /\.\w+$/
+  const EXT_RE = options.extensions
+    ? new RegExp(`\\.(${options.extensions.map(ext => ext.replace(/^\./, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`)
+    : /\.\w+$/
   filePath = filePath.replace(EXT_RE, '')
+
+  // detect named views (@ suffix before modes/extensions)
+  let namedView: string | undefined
+  const namedViewMatch = filePath.match(/@([\w-]+)(?:\.|$)/)
+  if (namedViewMatch) {
+    namedView = namedViewMatch[1]
+    filePath = filePath.replace(/@[\w-]+/, '')
+  }
 
   // detect modes
   const modes: string[] = []
@@ -59,15 +69,21 @@ export function parsePath(filePath: string, options: ParsePathOptions = {}): Par
   // add leading slash and remove trailing slash: test/ -> /test
   const segments = withoutLeadingSlash(withoutTrailingSlash(filePath)).split('/')
 
+  const meta: { modes?: string[], name?: string } = {}
+  if (modes.length > 0)
+    meta.modes = modes
+  if (namedView)
+    meta.name = namedView
+
   return {
     segments: segments.map(s => parseSegment(s, filePath, options.warn)),
-    modes: modes.length > 0 ? modes : undefined,
+    meta: Object.keys(meta).length > 0 ? meta : undefined,
   }
 }
 
 const PARAM_CHAR_RE = /[\w.]/
 
-export type SegmentType = 'static' | 'dynamic' | 'optional' | 'catchall' | 'group'
+export type SegmentType = 'static' | 'dynamic' | 'optional' | 'catchall' | 'group' | 'repeatable' | 'optional-repeatable'
 export interface ParsedPathSegmentToken { type: SegmentType, value: string }
 export type ParsedPathSegment = Array<ParsedPathSegmentToken>
 export interface ParsedPath {
@@ -76,9 +92,18 @@ export interface ParsedPath {
    */
   segments: ParsedPathSegment[]
   /**
-   * The detected modes from the file path (e.g., ['client', 'vapor'])
+   * Metadata about the parsed path including modes and named view
    */
-  modes?: string[]
+  meta?: {
+    /**
+     * The detected modes from the file path (e.g., ['client', 'vapor'])
+     */
+    modes?: string[]
+    /**
+     * The named view if the file has an @name suffix
+     */
+    name?: string
+  }
 }
 
 export function parseSegment(segment: string, absolutePath?: string, warn?: (message: string) => void) {
@@ -149,8 +174,29 @@ export function parseSegment(segment: string, absolutePath?: string, warn?: (mes
         if (c === ']' && (state !== 'optional' || segment[i - 1] === ']')) {
           if (!buffer)
             throw new Error('Empty param')
-          else
+
+          // Check for + modifier after closing bracket
+          if (segment[i + 1] === '+') {
+            if (state === 'optional') {
+              // [[param]]+ -> optional-repeatable
+              tokens.push({
+                type: 'optional-repeatable',
+                value: buffer,
+              })
+            }
+            else {
+              // [param]+ -> repeatable
+              tokens.push({
+                type: 'repeatable',
+                value: buffer,
+              })
+            }
+            buffer = ''
+            i++ // skip the + character
+          }
+          else {
             consumeBuffer()
+          }
 
           state = 'initial'
         }
