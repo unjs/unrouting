@@ -1,4 +1,4 @@
-import type { ParsedPath } from './parse'
+import type { ParsedPath, ParsedPathSegment } from './parse'
 
 import escapeStringRegexp from 'escape-string-regexp'
 import { encodePath, joinURL } from 'ufo'
@@ -60,6 +60,39 @@ export function toRou3(filePaths: string[] | ParsedPath[]) {
   return routes
 }
 
+function generatePathSegment(segment: ParsedPathSegment, hasSucceedingSegment: boolean) {
+  let pathSegment = ''
+  for (const token of segment) {
+    if (token.type === 'group')
+      continue
+    if (token.type === 'static') {
+      pathSegment += encodePath(token.value).replace(/:/g, '\\:')
+      continue
+    }
+    if (token.type === 'dynamic') {
+      pathSegment += `:${token.value}()`
+      continue
+    }
+    if (token.type === 'optional') {
+      pathSegment += `:${token.value}?`
+      continue
+    }
+    if (token.type === 'repeatable') {
+      pathSegment += `:${token.value}+`
+      continue
+    }
+    if (token.type === 'optional-repeatable') {
+      pathSegment += `:${token.value}*`
+      continue
+    }
+    if (token.type === 'catchall') {
+      pathSegment += hasSucceedingSegment ? `:${token.value}([^/]*)*` : `:${token.value}(.*)*`
+      continue
+    }
+  }
+  return pathSegment
+}
+
 export function toVueRouter4(filePaths: string[] | ParsedPath[]) {
   const routes: Array<{ path: string }> = []
 
@@ -76,36 +109,7 @@ export function toVueRouter4(filePaths: string[] | ParsedPath[]) {
         continue
 
       const hasSucceedingSegment = i < segments.length - 1
-
-      let pathSegment = ''
-      for (const token of segment) {
-        if (token.type === 'group')
-          continue
-        if (token.type === 'static') {
-          pathSegment += encodePath(token.value).replace(/:/g, '\\:')
-          continue
-        }
-        if (token.type === 'dynamic') {
-          pathSegment += `:${token.value}()`
-          continue
-        }
-        if (token.type === 'optional') {
-          pathSegment += `:${token.value}?`
-          continue
-        }
-        if (token.type === 'repeatable') {
-          pathSegment += `:${token.value}+`
-          continue
-        }
-        if (token.type === 'optional-repeatable') {
-          pathSegment += `:${token.value}*`
-          continue
-        }
-        if (token.type === 'catchall') {
-          pathSegment += hasSucceedingSegment ? `:${token.value}([^/]*)*` : `:${token.value}(.*)*`
-          continue
-        }
-      }
+      const pathSegment = generatePathSegment(segment, hasSucceedingSegment)
 
       // Only join if pathSegment is not empty
       if (pathSegment)
