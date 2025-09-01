@@ -39,7 +39,7 @@
     "bumpp": "10.2.3",
     "eslint": "latest",
     "lint-staged": "latest",
-    "pkg-pr-new": "0.0.57",
+    "pkg-pr-new": "0.0.58",
     "rou3": "0.7.3",
     "simple-git-hooks": "latest",
     "typescript": "latest",
