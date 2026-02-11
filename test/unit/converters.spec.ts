@@ -254,11 +254,13 @@ describe('vue-router support', () => {
 
   it('toVueRouter4 - resolves params correctly with actual vue-router', () => {
     const result = Object.fromEntries(Object.entries(paths).map(([path, example]) => {
-      const route = toVueRouter4(tree([path]))[0]
+      const { name, path: routePath, children } = toVueRouter4(tree([path]))[0]
       const router = createVueRouter({
         history: createMemoryHistory(),
         routes: [{
-          ...route,
+          name,
+          path: routePath,
+          children: children as any,
           component: () => ({}),
           meta: { value: example },
         }],
@@ -498,5 +500,203 @@ describe('buildTree duplicate strategies', () => {
     const t = buildTree(parsed)
     expect(t.root.children.has('about')).toBe(true)
     expect(t.root.children.has('contact')).toBe(true)
+  })
+})
+
+describe('pluggable route name generation', () => {
+  it('uses default Nuxt-style names', () => {
+    const routes = toVueRouter4(tree(['users/[id]/posts.vue']))
+    expect(routes[0].name).toBe('users-id-posts')
+  })
+
+  it('accepts custom getRouteName', () => {
+    const routes = toVueRouter4(tree(['users/[id]/posts.vue']), {
+      getRouteName: raw => raw.replace(/\//g, '.'),
+    })
+    expect(routes[0].name).toBe('users.id.posts')
+  })
+
+  it('custom name generator receives raw slash-separated name', () => {
+    const received: string[] = []
+    toVueRouter4(tree(['a.vue', 'b/c.vue']), {
+      getRouteName: (raw) => {
+        received.push(raw)
+        return raw
+      },
+    })
+    expect(received).toContain('a')
+    expect(received).toContain('b/c')
+  })
+})
+
+describe('route ordering / priority', () => {
+  it('orders static before dynamic within siblings', () => {
+    const routes = toVueRouter4(tree([
+      '[slug].vue',
+      'about.vue',
+      'index.vue',
+    ]))
+    const paths = routes.map(r => r.path)
+    const staticIdx = paths.indexOf('/about')
+    const dynamicIdx = paths.indexOf('/:slug()')
+    expect(staticIdx).toBeLessThan(dynamicIdx)
+  })
+
+  it('orders dynamic before optional', () => {
+    const routes = toVueRouter4(tree([
+      '[[opt]].vue',
+      '[req].vue',
+    ]))
+    const paths = routes.map(r => r.path)
+    expect(paths.indexOf('/:req()')).toBeLessThan(paths.indexOf('/:opt?'))
+  })
+
+  it('orders dynamic before catchall', () => {
+    const routes = toVueRouter4(tree([
+      '[...catch].vue',
+      '[slug].vue',
+      'static.vue',
+    ]))
+    const paths = routes.map(r => r.path)
+    const staticIdx = paths.indexOf('/static')
+    const dynamicIdx = paths.indexOf('/:slug()')
+    const catchIdx = paths.indexOf('/:catch(.*)*')
+    expect(staticIdx).toBeLessThan(dynamicIdx)
+    expect(dynamicIdx).toBeLessThan(catchIdx)
+  })
+
+  it('orders children by priority too', () => {
+    const routes = toVueRouter4(tree([
+      'parent.vue',
+      'parent/[...catch].vue',
+      'parent/[id].vue',
+      'parent/settings.vue',
+    ]))
+    const children = routes[0].children
+    const paths = children.map(r => r.path)
+    const staticIdx = paths.indexOf('settings')
+    const dynamicIdx = paths.indexOf(':id()')
+    const catchIdx = paths.indexOf(':catch(.*)*')
+    expect(staticIdx).toBeLessThan(dynamicIdx)
+    expect(dynamicIdx).toBeLessThan(catchIdx)
+  })
+})
+
+describe('mode-aware emission', () => {
+  it('emits modes when files have mode variants', () => {
+    const t = buildTree(['page.client.vue', 'page.server.vue'], { modes: ['client', 'server'] })
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(1)
+    expect(routes[0].modes).toBeDefined()
+    expect(routes[0].modes).toContain('client')
+    expect(routes[0].modes).toContain('server')
+  })
+
+  it('does not emit modes when no mode files exist', () => {
+    const routes = toVueRouter4(tree(['about.vue']))
+    expect(routes[0].modes).toBeUndefined()
+  })
+})
+
+describe('named view emission', () => {
+  it('emits components when named views exist', () => {
+    const t = buildTree(parsePath(['index.vue', 'index@sidebar.vue']))
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(1)
+    expect(routes[0].file).toBe('index.vue')
+    expect(routes[0].components).toEqual({
+      default: 'index.vue',
+      sidebar: 'index@sidebar.vue',
+    })
+  })
+
+  it('does not emit components for single-view routes', () => {
+    const routes = toVueRouter4(tree(['about.vue']))
+    expect(routes[0].components).toBeUndefined()
+  })
+
+  it('handles nested named views', () => {
+    const t = buildTree(parsePath(['users/[id].vue', 'users/[id]@aside.vue']))
+    const routes = toVueRouter4(t)
+    // Should be a flat route for users/[id] since there's no users.vue parent
+    const route = routes.find(r => r.path.includes(':id'))
+    expect(route).toBeDefined()
+    expect(route!.components).toEqual({
+      default: 'users/[id].vue',
+      aside: 'users/[id]@aside.vue',
+    })
+  })
+})
+
+describe('layer priority', () => {
+  it('higher priority file wins on collision (lower number = higher priority)', () => {
+    const t = buildTree([
+      { path: 'layer/pages/about.vue', priority: 1 },
+      { path: 'pages/about.vue', priority: 0 },
+    ], { roots: ['pages/', 'layer/pages/'] })
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(1)
+    // app layer (priority 0) should win over extending layer (priority 1)
+    expect(routes[0].file).toBe('pages/about.vue')
+  })
+
+  it('lower priority file does not override higher priority', () => {
+    const t = buildTree([
+      { path: 'pages/about.vue', priority: 0 },
+      { path: 'layer/pages/about.vue', priority: 1 },
+    ], { roots: ['pages/', 'layer/pages/'] })
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(1)
+    expect(routes[0].file).toBe('pages/about.vue')
+  })
+
+  it('files at different tree positions are not affected by priority', () => {
+    const t = buildTree([
+      { path: 'pages/about.vue', priority: 0 },
+      { path: 'layer/pages/contact.vue', priority: 1 },
+    ], { roots: ['pages/', 'layer/pages/'] })
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(2)
+  })
+
+  it('layer can add children to a parent from another layer', () => {
+    const t = buildTree([
+      { path: 'pages/dashboard.vue', priority: 0 },
+      { path: 'pages/dashboard/settings.vue', priority: 0 },
+      { path: 'layer/pages/dashboard/analytics.vue', priority: 1 },
+    ], { roots: ['pages/', 'layer/pages/'] })
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(1)
+    expect(routes[0].file).toBe('pages/dashboard.vue')
+    expect(routes[0].children).toHaveLength(2)
+    const childFiles = routes[0].children.map(c => c.file)
+    expect(childFiles).toContain('pages/dashboard/settings.vue')
+    expect(childFiles).toContain('layer/pages/dashboard/analytics.vue')
+  })
+
+  it('priority override works regardless of insertion order', () => {
+    // Layer file inserted first but has lower priority (higher number)
+    const t1 = buildTree([
+      { path: 'layer/pages/index.vue', priority: 1 },
+      { path: 'pages/index.vue', priority: 0 },
+    ], { roots: ['pages/', 'layer/pages/'] })
+    const r1 = toVueRouter4(t1)
+    expect(r1[0].file).toBe('pages/index.vue')
+
+    // App file inserted first — should still win
+    const t2 = buildTree([
+      { path: 'pages/index.vue', priority: 0 },
+      { path: 'layer/pages/index.vue', priority: 1 },
+    ], { roots: ['pages/', 'layer/pages/'] })
+    const r2 = toVueRouter4(t2)
+    expect(r2[0].file).toBe('pages/index.vue')
+  })
+
+  it('defaults to priority 0 for string inputs', () => {
+    const t = buildTree(['about.vue', 'about.vue'])
+    // First-wins with equal priority
+    const node = t.root.children.get('about')!
+    expect(node.files).toHaveLength(1)
+    expect(node.files[0].priority).toBe(0)
   })
 })

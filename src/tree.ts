@@ -7,7 +7,7 @@ import { parsePath } from './parse'
 
 /**
  * A file contributing to a route node.
- * Supports named views, mode variants, and per-file group tracking.
+ * Supports named views, mode variants, per-file group tracking, and layer priority.
  */
 export interface RouteNodeFile {
   /** Original file path (before root stripping / extension removal) */
@@ -22,6 +22,13 @@ export interface RouteNodeFile {
   groups: string[]
   /** Original parsed segments (including groups) from the parsed path */
   originalSegments: ParsedPathSegment[]
+  /**
+   * Layer priority. Lower number = higher priority.
+   * When two files collide at the same tree position (same view, groups, modes),
+   * the one with the lower priority number wins.
+   * @default 0
+   */
+  priority: number
 }
 
 /**
@@ -43,6 +50,20 @@ export interface RouteNode {
   children: Map<string, RouteNode>
   /** Parent reference */
   parent: RouteNode | null
+}
+
+/**
+ * Input file descriptor. Used when you need to specify priority per file.
+ */
+export interface InputFile {
+  /** File path (will be parsed according to BuildTreeOptions) */
+  path: string
+  /**
+   * Layer priority. Lower number = higher priority.
+   * When two files map to the same route, the lower priority wins.
+   * @default 0
+   */
+  priority?: number
 }
 
 export interface BuildTreeOptions extends ParsePathOptions {
@@ -78,26 +99,41 @@ function createNode(rawSegment: string, segment: ParsedPathSegment, parent: Rout
 /**
  * Build a route tree from file paths in a single pass.
  *
- * Accepts either raw file paths (with parse options) or pre-parsed paths.
- * When given raw strings, parsing and tree insertion happen in one loop
- * with no intermediate array allocation.
+ * Accepts:
+ * - `string[]` — raw file paths, all at default priority 0
+ * - `InputFile[]` — file paths with per-file priority
+ * - `ParsedPath[]` — pre-parsed paths (priority defaults to 0)
  *
- * 1. For each file, parse its path into segments
- * 2. Walk segments creating/reusing tree nodes
- * 3. Group segments `(name)` are transparent — don't create tree depth
- * 4. The file is attached to the final (leaf) node
+ * When files from different layers collide at the same tree position,
+ * the file with the lowest priority number wins.
  */
-export function buildTree(input: string[] | ParsedPath[], options: BuildTreeOptions = {}): RouteTree {
+export function buildTree(
+  input: string[] | InputFile[] | ParsedPath[],
+  options: BuildTreeOptions = {},
+): RouteTree {
   const root = createNode('', [{ type: 'static', value: '' }], null)
 
-  // If raw strings, parse them. parsePath already handles the batch efficiently
-  // (builds regexes once). We could inline per-file parsing for zero intermediate
-  // allocation, but parsePath is already O(n) and the regex compilation is the
-  // expensive part — which it does once.
-  const parsedPaths = isParsedPaths(input) ? input : parsePath(input, options)
+  if (input.length === 0)
+    return { root }
 
-  for (const parsedPath of parsedPaths) {
-    insertParsedPath(root, parsedPath, options)
+  // Determine input type and parse if needed
+  if (isParsedPaths(input)) {
+    for (const parsedPath of input)
+      insertParsedPath(root, parsedPath, 0, options)
+  }
+  else if (isInputFiles(input)) {
+    // InputFile[] — extract paths and priorities, parse in batch
+    const paths = input.map(f => f.path)
+    const priorities = input.map(f => f.priority ?? 0)
+    const parsedPaths = parsePath(paths, options)
+    for (let i = 0; i < parsedPaths.length; i++)
+      insertParsedPath(root, parsedPaths[i], priorities[i], options)
+  }
+  else {
+    // string[] — parse in batch, all priority 0
+    const parsedPaths = parsePath(input as string[], options)
+    for (const parsedPath of parsedPaths)
+      insertParsedPath(root, parsedPath, 0, options)
   }
 
   return { root }
@@ -107,7 +143,11 @@ function isParsedPaths(input: unknown[]): input is ParsedPath[] {
   return input.length > 0 && typeof input[0] === 'object' && input[0] !== null && 'segments' in input[0]
 }
 
-function insertParsedPath(root: RouteNode, parsedPath: ParsedPath, options: BuildTreeOptions): void {
+function isInputFiles(input: unknown[]): input is InputFile[] {
+  return input.length > 0 && typeof input[0] === 'object' && input[0] !== null && 'path' in input[0] && !('segments' in input[0])
+}
+
+function insertParsedPath(root: RouteNode, parsedPath: ParsedPath, priority: number, options: BuildTreeOptions): void {
   let current = root
   const groups: string[] = []
 
@@ -133,10 +173,12 @@ function insertParsedPath(root: RouteNode, parsedPath: ParsedPath, options: Buil
     modes,
     groups: [...groups],
     originalSegments: parsedPath.segments,
+    priority,
   }
 
   // Dedup: files with the same view, modes, AND groups are duplicates.
   // Files with different group paths are NOT duplicates.
+  // When duplicates collide, priority determines the winner.
   const groupKey = groups.join(',')
   const existing = current.files.find(f =>
     f.viewName === viewName
@@ -147,9 +189,15 @@ function insertParsedPath(root: RouteNode, parsedPath: ParsedPath, options: Buil
     const strategy = options.duplicateStrategy || 'first-wins'
     if (strategy === 'error')
       throw new Error(`Duplicate route file for view "${viewName}": "${existing.path}" and "${parsedPath.file}"`)
-    if (strategy === 'last-wins')
+    if (strategy === 'last-wins') {
       current.files[current.files.indexOf(existing)] = fileEntry
-    // 'first-wins': skip
+    }
+    else {
+      // 'first-wins': compare by priority — lower number wins
+      if (priority < existing.priority)
+        current.files[current.files.indexOf(existing)] = fileEntry
+      // else: existing has equal or higher priority, keep it
+    }
   }
   else {
     current.files.push(fileEntry)

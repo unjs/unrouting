@@ -1,5 +1,5 @@
 import type { ParsedPathSegment } from './parse'
-import type { RouteTree } from './tree'
+import type { RouteNodeFile, RouteTree } from './tree'
 
 import escapeStringRegexp from 'escape-string-regexp'
 import { encodePath, joinURL } from 'ufo'
@@ -11,14 +11,29 @@ import { encodePath, joinURL } from 'ufo'
 export interface VueRoute {
   name?: string
   path: string
+  /** Primary file (the 'default' view) */
   file?: string
+  /**
+   * All files for this route keyed by view name.
+   * Only present when named views exist.
+   * E.g. `{ default: 'index.vue', sidebar: 'index@sidebar.vue' }`
+   */
+  components?: Record<string, string>
+  /** Mode(s) this route operates in (e.g. ['client'], ['server']) */
+  modes?: string[]
   children: VueRoute[]
   meta?: Record<string, unknown>
 }
 
 export interface VueRouterEmitOptions {
-  /** Custom route name generator. Default: Nuxt-style (segments joined with '-') */
-  getRouteName?: (segments: string[]) => string
+  /**
+   * Custom route name generator.
+   * Receives the intermediate `/`-separated name built during tree traversal
+   * (e.g. `'users/id'`) and should return the final name (e.g. `'users-id'`).
+   *
+   * Default: Nuxt-style — strip trailing `/index`, replace `/` with `-`.
+   */
+  getRouteName?: (rawName: string) => string
 }
 
 export interface Rou3Route {
@@ -42,19 +57,50 @@ interface FlatFileInfo {
   /** Effective segments (group-only segments removed) */
   segments: ParsedPathSegment[]
   groups: string[]
+  /** All RouteNodeFiles at the same tree position (for views/modes) */
+  siblingFiles: RouteNodeFile[]
 }
 
 function flattenTree(tree: RouteTree): FlatFileInfo[] {
   const infos: FlatFileInfo[] = []
   ;(function walk(node) {
-    for (const file of node.files) {
+    // Group node files by (viewName='default', groupPath). Files that share
+    // the same group path but differ in modes or views are ONE route entry.
+    // Different group paths produce separate route entries (e.g. (foo)/index.vue
+    // vs (bar)/index.vue).
+    const defaults = node.files.filter(f => f.viewName === 'default')
+    const views = node.files.filter(f => f.viewName !== 'default')
+
+    // Group defaults by their group path — mode variants share a group path
+    const byGroupPath = new Map<string, RouteNodeFile[]>()
+    for (const f of (defaults.length > 0 ? defaults : node.files)) {
+      const key = f.groups.join(',')
+      if (!byGroupPath.has(key))
+        byGroupPath.set(key, [])
+      byGroupPath.get(key)!.push(f)
+    }
+
+    for (const [groupKey, groupFiles] of byGroupPath) {
+      // Pick the first file as the primary (drives path/name/file)
+      const primary = groupFiles[0]
       const segments: ParsedPathSegment[] = []
-      for (const seg of file.originalSegments) {
+      for (const seg of primary.originalSegments) {
         if (seg.every(t => t.type === 'group'))
           continue
         segments.push(seg)
       }
-      infos.push({ file: file.path, relativePath: file.relativePath, segments, groups: file.groups })
+      // Siblings: all files with same group path (mode variants + named views)
+      const siblings = [
+        ...groupFiles,
+        ...views.filter(v => v.groups.join(',') === groupKey),
+      ]
+      infos.push({
+        file: primary.path,
+        relativePath: primary.relativePath,
+        segments,
+        groups: primary.groups,
+        siblingFiles: siblings,
+      })
     }
     for (const child of node.children.values()) walk(child)
   })(tree.root)
@@ -69,7 +115,8 @@ function flattenTree(tree: RouteTree): FlatFileInfo[] {
  * Convert a route tree to Vue Router 4 route definitions.
  *
  * Handles nested routes, index promotion, structural collapse,
- * route groups, layer merging, and catchall optimisation.
+ * route groups, layer merging, catchall optimisation, route ordering,
+ * named views, and mode variants.
  */
 export function toVueRouter4(tree: RouteTree, options?: VueRouterEmitOptions): VueRoute[] {
   const fileInfos = flattenTree(tree)
@@ -79,15 +126,21 @@ export function toVueRouter4(tree: RouteTree, options?: VueRouterEmitOptions): V
   fileInfos.sort((a, b) => collator.compare(a.relativePath, b.relativePath))
   fileInfos.sort((a, b) => a.relativePath.length - b.relativePath.length)
 
-  // Build routes using Nuxt's name+path matching nesting algorithm
+  // Build routes using name+path matching nesting algorithm
   const routes: IntermediateRoute[] = []
 
   for (const info of fileInfos) {
-    const route: IntermediateRoute = { name: '', path: '', file: info.file, children: [], groups: info.groups }
+    const route: IntermediateRoute = {
+      name: '',
+      path: '',
+      file: info.file,
+      children: [],
+      groups: info.groups,
+      siblingFiles: info.siblingFiles,
+    }
     let parent = routes
 
-    // Files with no effective segments (e.g., purely group paths like `(group).vue`)
-    // still need a root path
+    // Files with no effective segments (e.g., purely group paths)
     if (info.segments.length === 0) {
       route.path = '/'
     }
@@ -135,7 +188,6 @@ export function toVueRouter4(tree: RouteTree, options?: VueRouterEmitOptions): V
 
 /**
  * Convert a route tree to rou3 route patterns.
- * Produces one pattern per file in the tree.
  */
 export function toRou3(tree: RouteTree): Rou3Route[] {
   return flattenTree(tree).map((info) => {
@@ -172,7 +224,6 @@ export function toRou3(tree: RouteTree): Rou3Route[] {
 
 /**
  * Convert a route tree to RegExp matchers.
- * Produces one matcher per file in the tree.
  */
 export function toRegExp(tree: RouteTree): RegExpRoute[] {
   return flattenTree(tree).map((info) => {
@@ -224,6 +275,39 @@ export function toRegExp(tree: RouteTree): RegExpRoute[] {
 }
 
 // ============================================================================
+// Route ordering / priority scoring
+// ============================================================================
+
+/**
+ * Compare two routes for ordering.
+ * Returns negative if a should come first, positive if b should come first.
+ */
+function compareRoutes(a: IntermediateRoute, b: IntermediateRoute): number {
+  // Score by path segments
+  const aSegments = a.path.split('/').filter(Boolean)
+  const bSegments = b.path.split('/').filter(Boolean)
+
+  // Compare segment by segment using the raw parsed segments
+  const aScore = a.scoreSegments || []
+  const bScore = b.scoreSegments || []
+  const len = Math.max(aScore.length, bScore.length)
+
+  for (let i = 0; i < len; i++) {
+    const sa = aScore[i] ?? -Infinity
+    const sb = bScore[i] ?? -Infinity
+    if (sa !== sb)
+      return sb - sa // Higher score first
+  }
+
+  // Tie-break: fewer segments first (more specific)
+  if (aSegments.length !== bSegments.length)
+    return aSegments.length - bSegments.length
+
+  // Final tie-break: alphabetical
+  return a.path.localeCompare(b.path, 'en-US')
+}
+
+// ============================================================================
 // Internals
 // ============================================================================
 
@@ -265,19 +349,41 @@ interface IntermediateRoute {
   file: string
   children: IntermediateRoute[]
   groups: string[]
+  siblingFiles: RouteNodeFile[]
+  /** Pre-computed score for each parsed segment (for ordering) */
+  scoreSegments?: number[]
 }
 
 const INDEX_RE = /\/index$/
 const SLASH_RE = /\//g
 
-function prepareRoutes(routes: IntermediateRoute[], parent?: IntermediateRoute, _options?: VueRouterEmitOptions): VueRoute[] {
+/** Default name generator: Nuxt-style (strip /index, replace / with -) */
+function defaultGetRouteName(rawName: string): string {
+  return rawName.replace(INDEX_RE, '').replace(SLASH_RE, '-') || 'index'
+}
+
+function prepareRoutes(
+  routes: IntermediateRoute[],
+  parent?: IntermediateRoute,
+  options?: VueRouterEmitOptions,
+): VueRoute[] {
+  const getRouteName = options?.getRouteName || defaultGetRouteName
+
+  // Compute score segments for ordering
+  for (const route of routes) {
+    route.scoreSegments = computeScoreSegments(route)
+  }
+
+  // Sort siblings by priority
+  routes.sort(compareRoutes)
+
   return routes.map((route) => {
-    let name: string | undefined = route.name.replace(INDEX_RE, '').replace(SLASH_RE, '-') || 'index'
+    let name: string | undefined = getRouteName(route.name)
     let path = route.path
     if (parent && path[0] === '/')
       path = path.slice(1)
 
-    const children = route.children.length ? prepareRoutes(route.children, route, _options) : []
+    const children = route.children.length ? prepareRoutes(route.children, route, options) : []
     if (children.some(c => c.path === ''))
       name = undefined
 
@@ -285,8 +391,48 @@ function prepareRoutes(routes: IntermediateRoute[], parent?: IntermediateRoute, 
     if (name !== undefined)
       out.name = name
     if (route.groups.length > 0)
-      out.meta = { groups: route.groups }
+      out.meta = { ...out.meta, groups: route.groups }
+
+    // Named views: if there are multiple view files, add `components`
+    const views = route.siblingFiles.filter(f => f.viewName !== 'default')
+    if (views.length > 0) {
+      out.components = { default: route.file }
+      for (const v of views)
+        out.components[v.viewName] = v.path
+    }
+
+    // Modes: collect all unique modes from sibling files
+    const allModes = new Set<string>()
+    for (const f of route.siblingFiles) {
+      if (f.modes) {
+        for (const m of f.modes) allModes.add(m)
+      }
+    }
+    if (allModes.size > 0)
+      out.modes = [...allModes]
+
     return out
+  })
+}
+
+/**
+ * Compute score segments from the intermediate route's raw path.
+ * We re-parse the path to extract segment types for scoring.
+ * This uses the original file info's segments stored during tree flattening.
+ */
+function computeScoreSegments(route: IntermediateRoute): number[] {
+  // Walk the path to find non-empty segments and score them
+  // The path is in vue-router format, so we score by token patterns
+  const parts = route.path.split('/').filter(Boolean)
+  return parts.map((part) => {
+    // Catchall: lowest priority
+    if (part.includes('(.*)*') || part.includes('([^/]*)*'))
+      return -400
+    // Dynamic parameter
+    if (part.startsWith(':') || part.includes(':'))
+      return part.includes('?') ? 100 : part.includes('+') ? 200 : part.includes('*') ? 50 : 300
+    // Static
+    return 400
   })
 }
 
