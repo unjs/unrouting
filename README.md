@@ -13,22 +13,26 @@
 
 ## Status
 
-In active development. The core pipeline (parse, tree, emit) is functional and tested against Nuxt's route generation output.
+In active development. The core pipeline (parse, tree, emit) is functional with 107 tests passing, validated as a drop-in replacement for Nuxt's `generateRoutesFromFiles` (52/52 Nuxt pages tests pass).
 
 - [x] Generic route parsing covering major filesystem routing patterns
   - [x] [Nuxt](https://github.com/nuxt/nuxt) / [unplugin-vue-router](https://github.com/posva/unplugin-vue-router)
   - [ ] [SvelteKit](https://kit.svelte.dev/docs/routing)
   - [ ] [Next.js](https://nextjs.org/docs/app/building-your-application/routing)
 - [x] Route tree with nesting, layer merging, group transparency
+- [x] Layer priority (multiple roots with configurable file precedence)
+- [x] Pluggable route name generation
+- [x] Route ordering by segment priority (static > dynamic > optional > catchall)
+- [x] Named view support (`@viewName` convention)
+- [x] Mode variant support (`.client`, `.server`, configurable)
+- [x] Duplicate route name detection
 - [x] Emit to framework routers
-  - [x] [`vue-router`](https://router.vuejs.org/) (nested routes, names, files, meta)
+  - [x] [`vue-router`](https://router.vuejs.org/) (nested routes, names, files, children, meta, components, modes)
   - [x] [rou3](http://github.com/h3js/rou3)/[Nitro](https://nitro.unjs.io/)
   - [x] RegExp patterns
   - [ ] [SolidStart](https://start.solidjs.com/core-concepts/routing)
   - [ ] [SvelteKit](https://kit.svelte.dev/docs/routing)
-- [ ] Pluggable route name generation
-- [ ] Route ordering / priority scoring
-- [ ] Tree transformation API (for i18n, custom route manipulation)
+- [ ] Tree transformation API (for i18n locale expansion, custom route manipulation)
 - [ ] Filesystem scanning (with optional watch mode)
 
 ## Install
@@ -74,22 +78,26 @@ const routes = toVueRouter4(tree)
 ```js
 import { buildTree, toVueRouter4 } from 'unrouting'
 
-// Files from app + layer directories
+// Files from app + layer directories with priority
 const tree = buildTree([
-  'pages/index.vue',
-  'pages/dashboard.vue',
-  'pages/dashboard/settings.vue',
-  'layer/pages/dashboard/analytics.vue',
+  { path: 'pages/index.vue', priority: 0 }, // app layer (wins on collision)
+  { path: 'pages/dashboard.vue', priority: 0 },
+  { path: 'pages/dashboard/settings.vue', priority: 0 },
+  { path: 'layer/pages/dashboard/analytics.vue', priority: 1 }, // extending layer
+  { path: 'layer/pages/index.vue', priority: 1 }, // overridden by app layer
 ], {
   roots: ['pages/', 'layer/pages/'],
   extensions: ['.vue'],
   modes: ['client', 'server'],
+  warn: msg => console.warn(msg),
 })
 
-const routes = toVueRouter4(tree)
+const routes = toVueRouter4(tree, {
+  onDuplicateRouteName: (name, file, existingFile) => {
+    console.warn(`Duplicate route name "${name}": ${file} and ${existingFile}`)
+  },
+})
 ```
-
-`buildTree` accepts raw file paths and handles parsing internally in a single pass — no intermediate array allocation needed.
 
 ### Emitting to different formats
 
@@ -118,8 +126,9 @@ const regexpRoutes = toRegExp(tree)
 If you need parsed segments without building a tree (e.g., for custom processing):
 
 ```js
-import { parsePath } from 'unrouting'
+import { parsePath, parseSegment } from 'unrouting'
 
+// Parse a full file path
 const [result] = parsePath(['users/[id]/profile.vue'])
 // {
 //   file: 'users/[id]/profile.vue',
@@ -128,8 +137,11 @@ const [result] = parsePath(['users/[id]/profile.vue'])
 //     [{ type: 'dynamic', value: 'id' }],
 //     [{ type: 'static', value: 'profile' }],
 //   ],
-//   meta: undefined,
 // }
+
+// Parse a single segment
+const tokens = parseSegment('[...slug]')
+// [{ type: 'catchall', value: 'slug' }]
 ```
 
 ## Supported patterns
@@ -153,10 +165,19 @@ const [result] = parsePath(['users/[id]/profile.vue'])
 
 ### `buildTree(input, options?)`
 
-Build a route tree from file paths. Accepts raw strings (parses internally) or pre-parsed `ParsedPath[]`.
+Build a route tree from file paths. Accepts raw strings, `InputFile[]` (with priority), or pre-parsed `ParsedPath[]`.
 
 ```ts
-function buildTree(input: string[] | ParsedPath[], options?: BuildTreeOptions): RouteTree
+function buildTree(
+  input: string[] | InputFile[] | ParsedPath[],
+  options?: BuildTreeOptions
+): RouteTree
+
+interface InputFile {
+  path: string
+  /** Lower number = higher priority. Default: 0 */
+  priority?: number
+}
 ```
 
 **Options** (extends `ParsePathOptions`):
@@ -166,12 +187,14 @@ function buildTree(input: string[] | ParsedPath[], options?: BuildTreeOptions): 
 | `roots` | `string[]` | Root paths to strip (e.g., `['pages/', 'layer/pages/']`) |
 | `extensions` | `string[]` | File extensions to strip (default: strip all) |
 | `modes` | `string[]` | Mode suffixes to detect (e.g., `['client', 'server']`) |
-| `warn` | `(msg: string) => void` | Warning callback for invalid characters |
+| `warn` | `(msg: string) => void` | Warning callback for invalid characters in dynamic params |
 | `duplicateStrategy` | `'first-wins' \| 'last-wins' \| 'error'` | How to handle duplicate paths (default: `'first-wins'`) |
+
+When files from different layers collide at the same tree position, the file with the lowest `priority` number wins regardless of insertion order.
 
 ### `toVueRouter4(tree, options?)`
 
-Emit Vue Router 4 route definitions from a tree. Handles nested routes, names, index promotion, structural collapse, groups, and catchall optimisation.
+Emit Vue Router 4 route definitions from a tree. Handles nested routes, names, index promotion, structural collapse, groups, catchall optimisation, route ordering, named views, and mode variants.
 
 ```ts
 function toVueRouter4(tree: RouteTree, options?: VueRouterEmitOptions): VueRoute[]
@@ -180,10 +203,23 @@ interface VueRoute {
   name?: string
   path: string
   file?: string
+  /** Named view components. Only present when multiple views exist. */
+  components?: Record<string, string>
+  /** Mode variants. Only present when mode files exist. */
+  modes?: string[]
   children: VueRoute[]
   meta?: Record<string, unknown>
 }
+
+interface VueRouterEmitOptions {
+  /** Custom name generator. Receives raw `/`-separated name, returns final name. */
+  getRouteName?: (rawName: string) => string
+  /** Called when two routes produce the same name. */
+  onDuplicateRouteName?: (name: string, file: string, existingFile: string) => void
+}
 ```
+
+Routes are sorted by segment priority within each level: static segments first, then dynamic, optional, and catchall last.
 
 ### `toRou3(tree)`
 
@@ -224,6 +260,21 @@ interface ParsedPath {
   segments: ParsedPathSegment[]
   meta?: { modes?: string[], name?: string }
 }
+```
+
+### `parseSegment(segment, absolutePath?, warn?)`
+
+Parse a single filesystem segment into typed tokens. Useful for modules that need to parse custom paths (e.g., i18n locale-specific routes).
+
+```ts
+function parseSegment(
+  segment: string,
+  absolutePath?: string,
+  warn?: (message: string) => void
+): ParsedPathSegmentToken[]
+
+// Token types: 'static' | 'dynamic' | 'optional' | 'catchall' |
+//              'repeatable' | 'optional-repeatable' | 'group'
 ```
 
 ### `walkTree(tree, visitor)`
