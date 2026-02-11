@@ -85,7 +85,9 @@ export function parsePath(filePaths: string[], options: ParsePathOptions = {}): 
 
     filePath = remainingPath
 
-    // add leading slash and remove trailing slash: test/ -> /test
+    // normalize: strip leading/trailing slashes so "test/" → "test", "/" → ""
+    // Note: withoutTrailingSlash('') returns '/' and withoutLeadingSlash('/') returns '/'
+    // so empty paths (e.g., root-only files) result in normalizedPath === '/'
     const normalizedPath = withoutLeadingSlash(withoutTrailingSlash(filePath))
     const segments = normalizedPath === '/' ? [''] : normalizedPath.split('/')
 

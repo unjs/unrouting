@@ -34,6 +34,13 @@ export interface VueRouterEmitOptions {
    * Default: Nuxt-style — strip trailing `/index`, replace `/` with `-`.
    */
   getRouteName?: (rawName: string) => string
+
+  /**
+   * Called when two routes have the same generated name.
+   * Useful for warning users about potential conflicts
+   * (e.g. `parent/[child].vue` and `parent-[child].vue` both produce `parent-child`).
+   */
+  onDuplicateRouteName?: (name: string, file: string, existingFile: string) => void
 }
 
 export interface Rou3Route {
@@ -283,11 +290,7 @@ export function toRegExp(tree: RouteTree): RegExpRoute[] {
  * Returns negative if a should come first, positive if b should come first.
  */
 function compareRoutes(a: IntermediateRoute, b: IntermediateRoute): number {
-  // Score by path segments
-  const aSegments = a.path.split('/').filter(Boolean)
-  const bSegments = b.path.split('/').filter(Boolean)
-
-  // Compare segment by segment using the raw parsed segments
+  // Compare segment by segment using pre-computed score segments
   const aScore = a.scoreSegments || []
   const bScore = b.scoreSegments || []
   const len = Math.max(aScore.length, bScore.length)
@@ -300,6 +303,8 @@ function compareRoutes(a: IntermediateRoute, b: IntermediateRoute): number {
   }
 
   // Tie-break: fewer segments first (more specific)
+  const aSegments = a.path.split('/').filter(Boolean)
+  const bSegments = b.path.split('/').filter(Boolean)
   if (aSegments.length !== bSegments.length)
     return aSegments.length - bSegments.length
 
@@ -366,6 +371,7 @@ function prepareRoutes(
   routes: IntermediateRoute[],
   parent?: IntermediateRoute,
   options?: VueRouterEmitOptions,
+  names = new Map<string, string>(),
 ): VueRoute[] {
   const getRouteName = options?.getRouteName || defaultGetRouteName
 
@@ -383,9 +389,18 @@ function prepareRoutes(
     if (parent && path[0] === '/')
       path = path.slice(1)
 
-    const children = route.children.length ? prepareRoutes(route.children, route, options) : []
+    const children = route.children.length ? prepareRoutes(route.children, route, options, names) : []
     if (children.some(c => c.path === ''))
       name = undefined
+
+    // Warn about duplicate route names
+    if (name !== undefined && options?.onDuplicateRouteName) {
+      const existingFile = names.get(name)
+      if (existingFile) {
+        options.onDuplicateRouteName(name, route.file, existingFile)
+      }
+      names.set(name, route.file)
+    }
 
     const out: VueRoute = { path, file: route.file, children }
     if (name !== undefined)
@@ -415,21 +430,27 @@ function prepareRoutes(
   })
 }
 
+/** Check if a vue-router path segment contains an unescaped colon (dynamic param marker) */
+function hasUnescapedColon(part: string): boolean {
+  for (let i = 0; i < part.length; i++) {
+    if (part[i] === ':' && (i === 0 || part[i - 1] !== '\\'))
+      return true
+  }
+  return false
+}
+
 /**
  * Compute score segments from the intermediate route's raw path.
- * We re-parse the path to extract segment types for scoring.
- * This uses the original file info's segments stored during tree flattening.
+ * The path is in vue-router format, so we score by token patterns.
  */
 function computeScoreSegments(route: IntermediateRoute): number[] {
-  // Walk the path to find non-empty segments and score them
-  // The path is in vue-router format, so we score by token patterns
   const parts = route.path.split('/').filter(Boolean)
   return parts.map((part) => {
     // Catchall: lowest priority
     if (part.includes('(.*)*') || part.includes('([^/]*)*'))
       return -400
-    // Dynamic parameter
-    if (part.startsWith(':') || part.includes(':'))
+    // Dynamic parameter — only match unescaped colons (escaped colons like \: are static)
+    if (hasUnescapedColon(part))
       return part.includes('?') ? 100 : part.includes('+') ? 200 : part.includes('*') ? 50 : 300
     // Static
     return 400

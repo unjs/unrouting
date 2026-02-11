@@ -69,6 +69,12 @@ export interface InputFile {
 export interface BuildTreeOptions extends ParsePathOptions {
   /**
    * Strategy when same relative path appears from multiple sources.
+   *
+   * - `'first-wins'` — keep the first file unless a later file has strictly
+   *   higher priority (lower priority number). Equal priority = first inserted wins.
+   * - `'last-wins'` — always replace with the later file.
+   * - `'error'` — throw on duplicates.
+   *
    * @default 'first-wins'
    */
   duplicateStrategy?: 'first-wins' | 'last-wins' | 'error'
@@ -177,14 +183,18 @@ function insertParsedPath(root: RouteNode, parsedPath: ParsedPath, priority: num
   }
 
   // Dedup: files with the same view, modes, AND groups are duplicates.
-  // Files with different group paths are NOT duplicates.
+  // Files with different group paths or different modes are NOT duplicates.
   // When duplicates collide, priority determines the winner.
   const groupKey = groups.join(',')
-  const existing = current.files.find(f =>
-    f.viewName === viewName
-    && !f.modes?.length && !modes?.length
-    && f.groups.join(',') === groupKey,
-  )
+  const modesKey = modes?.slice().sort().join(',') ?? ''
+  const existing = current.files.find((f) => {
+    if (f.viewName !== viewName)
+      return false
+    if (f.groups.join(',') !== groupKey)
+      return false
+    const existingModesKey = f.modes?.slice().sort().join(',') ?? ''
+    return existingModesKey === modesKey
+  })
   if (existing) {
     const strategy = options.duplicateStrategy || 'first-wins'
     if (strategy === 'error')
@@ -193,10 +203,10 @@ function insertParsedPath(root: RouteNode, parsedPath: ParsedPath, priority: num
       current.files[current.files.indexOf(existing)] = fileEntry
     }
     else {
-      // 'first-wins': compare by priority — lower number wins
+      // 'first-wins': keep the existing file unless the new one has strictly
+      // lower priority number (higher priority). Equal priority = first inserted wins.
       if (priority < existing.priority)
         current.files[current.files.indexOf(existing)] = fileEntry
-      // else: existing has equal or higher priority, keep it
     }
   }
   else {

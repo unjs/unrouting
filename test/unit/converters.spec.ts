@@ -527,6 +527,26 @@ describe('pluggable route name generation', () => {
     expect(received).toContain('a')
     expect(received).toContain('b/c')
   })
+
+  it('calls onDuplicateRouteName when routes have the same name', () => {
+    const duplicates: Array<{ name: string, file: string, existingFile: string }> = []
+    // parent/[child].vue and parent-[child].vue both produce name 'parent-child'
+    toVueRouter4(tree(['parent/[child].vue', 'parent-[child].vue']), {
+      onDuplicateRouteName: (name, file, existingFile) => {
+        duplicates.push({ name, file, existingFile })
+      },
+    })
+    expect(duplicates).toHaveLength(1)
+    expect(duplicates[0].name).toBe('parent-child')
+  })
+
+  it('does not call onDuplicateRouteName when names are unique', () => {
+    const duplicates: string[] = []
+    toVueRouter4(tree(['about.vue', 'contact.vue']), {
+      onDuplicateRouteName: name => duplicates.push(name),
+    })
+    expect(duplicates).toHaveLength(0)
+  })
 })
 
 describe('route ordering / priority', () => {
