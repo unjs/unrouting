@@ -47,10 +47,15 @@ describe('parsing vue file paths', () => {
     const [result] = parsePath([''])
     expect(result).toMatchInlineSnapshot(`
       {
+        "file": "",
         "meta": undefined,
         "segments": [
-          [],
-          [],
+          [
+            {
+              "type": "static",
+              "value": "",
+            },
+          ],
         ],
       }
     `)
@@ -143,7 +148,9 @@ describe('parsing vue file paths', () => {
 
     // Test parseSegment with empty segment
     const result3 = parseSegment('')
-    expect(result3).toEqual([])
+    expect(result3).toEqual([{ type: 'static', value: '' }])
+    const result4 = parseSegment('index')
+    expect(result4).toEqual([{ type: 'static', value: '' }])
   })
 
   it('works', () => {
@@ -151,6 +158,7 @@ describe('parsing vue file paths', () => {
     expect(result).toMatchInlineSnapshot(`
       {
         "[...slug].vue": {
+          "file": "[...slug].vue",
           "meta": undefined,
           "segments": [
             [
@@ -162,6 +170,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "[[c3@3c]].vue": {
+          "file": "[[c3@3c]].vue",
           "meta": undefined,
           "segments": [
             [
@@ -173,6 +182,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "[[d4-4d]].vue": {
+          "file": "[[d4-4d]].vue",
           "meta": undefined,
           "segments": [
             [
@@ -184,6 +194,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "[[foo]]/index.vue": {
+          "file": "[[foo]]/index.vue",
           "meta": undefined,
           "segments": [
             [
@@ -201,6 +212,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "[[slug]]+.vue": {
+          "file": "[[slug]]+.vue",
           "meta": undefined,
           "segments": [
             [
@@ -212,6 +224,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "[[sub]]/route-[slug].vue": {
+          "file": "[[sub]]/route-[slug].vue",
           "meta": undefined,
           "segments": [
             [
@@ -233,6 +246,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "[a1_1a].vue": {
+          "file": "[a1_1a].vue",
           "meta": undefined,
           "segments": [
             [
@@ -244,6 +258,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "[b2.2b].vue": {
+          "file": "[b2.2b].vue",
           "meta": undefined,
           "segments": [
             [
@@ -255,6 +270,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "[b2]_[2b].vue": {
+          "file": "[b2]_[2b].vue",
           "meta": undefined,
           "segments": [
             [
@@ -274,6 +290,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "[slug]+.vue": {
+          "file": "[slug]+.vue",
           "meta": undefined,
           "segments": [
             [
@@ -285,6 +302,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "[slug].vue": {
+          "file": "[slug].vue",
           "meta": undefined,
           "segments": [
             [
@@ -296,6 +314,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "articles/[slug]+.vue": {
+          "file": "articles/[slug]+.vue",
           "meta": undefined,
           "segments": [
             [
@@ -313,6 +332,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "file.vue": {
+          "file": "file.vue",
           "meta": undefined,
           "segments": [
             [
@@ -324,6 +344,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "index@sidebar.vue": {
+          "file": "index@sidebar.vue",
           "meta": {
             "name": "sidebar",
           },
@@ -337,6 +358,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "optional/[[opt]]-postfix.vue": {
+          "file": "optional/[[opt]]-postfix.vue",
           "meta": undefined,
           "segments": [
             [
@@ -358,6 +380,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "optional/[[opt]].vue": {
+          "file": "optional/[[opt]].vue",
           "meta": undefined,
           "segments": [
             [
@@ -375,6 +398,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "optional/prefix-[[opt]]-postfix.vue": {
+          "file": "optional/prefix-[[opt]]-postfix.vue",
           "meta": undefined,
           "segments": [
             [
@@ -400,6 +424,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "optional/prefix-[[opt]].vue": {
+          "file": "optional/prefix-[[opt]].vue",
           "meta": undefined,
           "segments": [
             [
@@ -421,6 +446,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "test.html.vue": {
+          "file": "test.html.vue",
           "meta": undefined,
           "segments": [
             [
@@ -432,6 +458,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "test:name.vue": {
+          "file": "test:name.vue",
           "meta": undefined,
           "segments": [
             [
@@ -443,6 +470,7 @@ describe('parsing vue file paths', () => {
           ],
         },
         "users/[id]@aside.vue": {
+          "file": "users/[id]@aside.vue",
           "meta": {
             "name": "aside",
           },
@@ -571,5 +599,162 @@ describe('multiple extensions support', () => {
         [{ type: 'static', value: 'users' }],
       ],
     })
+  })
+})
+describe('roots', () => {
+  it('should strip single root from file paths', () => {
+    const filePaths = ['src/pages/index.vue', 'src/pages/about.vue']
+    const result = parsePath(filePaths, { roots: ['src/pages'] })
+
+    expect(result).toEqual([
+      {
+        file: 'src/pages/index.vue',
+        segments: [[{ type: 'static', value: '' }]],
+        meta: undefined,
+      },
+      {
+        file: 'src/pages/about.vue',
+        segments: [[{ type: 'static', value: 'about' }]],
+        meta: undefined,
+      },
+    ])
+  })
+
+  it('should strip most specific root first', () => {
+    const filePaths = ['src/pages/admin/users.vue']
+    const result = parsePath(filePaths, {
+      roots: ['src', 'src/pages', 'src/pages/admin'],
+    })
+
+    expect(result).toEqual([
+      {
+        file: 'src/pages/admin/users.vue',
+        segments: [[{ type: 'static', value: 'users' }]],
+        meta: undefined,
+      },
+    ])
+  })
+
+  it('should handle exact path matches', () => {
+    // Test exact directory match with trailing slash
+    const filePaths = ['src/pages/']
+    const result = parsePath(filePaths, { roots: ['src/pages'] })
+
+    expect(result).toEqual([
+      {
+        file: 'src/pages/',
+        segments: [[{ type: 'static', value: '' }]],
+        meta: undefined,
+      },
+    ])
+  })
+
+  it('should not strip if no matching root', () => {
+    const filePaths = ['other/pages/index.vue']
+    const result = parsePath(filePaths, { roots: ['src/pages'] })
+
+    expect(result).toEqual([
+      {
+        file: 'other/pages/index.vue',
+        segments: [
+          [{ type: 'static', value: 'other' }],
+          [{ type: 'static', value: 'pages' }],
+          [{ type: 'static', value: '' }],
+        ],
+        meta: undefined,
+      },
+    ])
+  })
+
+  it('should handle empty roots array', () => {
+    const filePaths = ['src/pages/index.vue']
+    const result = parsePath(filePaths, { roots: [] })
+
+    expect(result).toEqual([
+      {
+        file: 'src/pages/index.vue',
+        segments: [
+          [{ type: 'static', value: 'src' }],
+          [{ type: 'static', value: 'pages' }],
+          [{ type: 'static', value: '' }],
+        ],
+        meta: undefined,
+      },
+    ])
+  })
+
+  it('should handle roots with trailing slashes', () => {
+    const filePaths = ['src/pages/index.vue']
+    const result = parsePath(filePaths, { roots: ['src/pages/'] })
+
+    expect(result).toEqual([
+      {
+        file: 'src/pages/index.vue',
+        segments: [[{ type: 'static', value: '' }]],
+        meta: undefined,
+      },
+    ])
+  })
+
+  it('should work with complex dynamic paths after root stripping', () => {
+    const filePaths = ['src/pages/[slug]/[...rest].vue']
+    const result = parsePath(filePaths, { roots: ['src/pages'] })
+
+    expect(result).toEqual([
+      {
+        file: 'src/pages/[slug]/[...rest].vue',
+        segments: [
+          [{ type: 'dynamic', value: 'slug' }],
+          [{ type: 'catchall', value: 'rest' }],
+        ],
+        meta: undefined,
+      },
+    ])
+  })
+
+  // Tests to achieve 100% branch coverage
+  it('should handle empty path with modes after root stripping', () => {
+    const filePaths = ['src/pages/index.client.vue']
+    const result = parsePath(filePaths, {
+      roots: ['src/pages'],
+      modes: ['client', 'server'],
+    })
+
+    expect(result).toEqual([
+      {
+        file: 'src/pages/index.client.vue',
+        segments: [[{ type: 'static', value: '' }]],
+        meta: { modes: ['client'] },
+      },
+    ])
+  })
+
+  it('should handle empty path with named view after root stripping', () => {
+    const filePaths = ['src/pages/index@sidebar.vue']
+    const result = parsePath(filePaths, { roots: ['src/pages'] })
+
+    expect(result).toEqual([
+      {
+        file: 'src/pages/index@sidebar.vue',
+        segments: [[{ type: 'static', value: '' }]],
+        meta: { name: 'sidebar' },
+      },
+    ])
+  })
+
+  it('should handle empty path with both modes and named view after root stripping', () => {
+    const filePaths = ['src/pages/index@sidebar.client.vue']
+    const result = parsePath(filePaths, {
+      roots: ['src/pages'],
+      modes: ['client', 'server'],
+    })
+
+    expect(result).toEqual([
+      {
+        file: 'src/pages/index@sidebar.client.vue',
+        segments: [[{ type: 'static', value: '' }]],
+        meta: { modes: ['client'], name: 'sidebar' },
+      },
+    ])
   })
 })

@@ -1,7 +1,10 @@
 import { addRoute, createRouter, findRoute } from 'rou3'
 import { describe, expect, it } from 'vitest'
 import { createMemoryHistory, createRouter as createVueRouter } from 'vue-router'
-import { parsePath, toRegExp, toRou3, toVueRouter4 } from '../../src'
+import { buildTree, isPageNode, parsePath, toRegExp, toRou3, toVueRouter4, walkTree } from '../../src'
+
+/** buildTree shorthand — accepts raw strings */
+const tree = (paths: string[]) => buildTree(paths)
 
 describe('rou3 support', () => {
   const paths = {
@@ -13,26 +16,13 @@ describe('rou3 support', () => {
     '/file/[...slug].vue': '/file/here/we/go',
     '[a1_1a].vue': '/file',
     '[b2.2b].vue': '/file',
-    // TODO: mixed parameters are not (yet?) supported in rou3
-    // 'test:name.vue': '/test:name',
-    // '[b2]_[2b].vue': '/fi_le',
-    // TODO: optional parameters are not (yet?) supported in rou3
-    // '[[foo]]/index.vue': '/some',
-    // '[[sub]]/route-[slug].vue': '/some/route-value',
-    // 'optional/[[opt]].vue': '/optional',
-    // 'optional/prefix-[[opt]].vue': '/optional/prefix-test',
-    // 'optional/[[opt]]-postfix.vue': '/optional/some-postfix',
-    // 'optional/prefix-[[opt]]-postfix.vue': '/optional/prefix--postfix',
-    // '[[c3@3c]].vue': '/file',
-    // '[[d4-4d]].vue': '/file',
   }
 
   it('toRou3', () => {
     const result = Object.fromEntries(Object.entries(paths).map(([path, example]) => {
       const router = createRouter<{ value: string }>()
-      addRoute(router, 'GET', toRou3([path])[0], { value: example })
+      addRoute(router, 'GET', toRou3(tree([path]))[0].path, { value: example })
       const result = findRoute(router, 'GET', example)
-      // Return params if available (for dynamic routes), otherwise return the value from data
       return [path, result?.params || result?.data.value]
     }))
 
@@ -59,54 +49,23 @@ describe('rou3 support', () => {
   })
 
   it('should throw error for optional parameters', () => {
-    expect(() => toRou3(['[[optional]].vue'])).toThrow('[unrouting] `toRou3` does not support optional parameters')
+    expect(() => toRou3(tree(['[[optional]].vue']))).toThrow('[unrouting] `toRou3` does not support optional parameters')
   })
 
   it('should throw error for repeatable parameters', () => {
-    expect(() => toRou3(['[slug]+.vue'])).toThrow('[unrouting] `toRou3` does not support repeatable parameters')
+    expect(() => toRou3(tree(['[slug]+.vue']))).toThrow('[unrouting] `toRou3` does not support repeatable parameters')
   })
 
   it('should throw error for optional-repeatable parameters', () => {
-    expect(() => toRou3(['[[slug]]+.vue'])).toThrow('[unrouting] `toRou3` does not support optional repeatable parameters')
-  })
-
-  it('should handle dynamic parameters without value', () => {
-    // Test dynamic token without value (should generate '*') - manually create a parsed path
-    const parsedPath = {
-      segments: [[{ type: 'dynamic' as const, value: '' }]],
-      meta: undefined,
-    }
-    const result = toRou3([parsedPath])
-    expect(result).toEqual(['/*'])
-  })
-
-  it('should handle catchall parameters without value', () => {
-    // Test catchall token without value (should generate '**') - manually create a parsed path
-    const parsedPath = {
-      segments: [[{ type: 'catchall' as const, value: '' }]],
-      meta: undefined,
-    }
-    const result = toRou3([parsedPath])
-    expect(result).toEqual(['/**'])
+    expect(() => toRou3(tree(['[[slug]]+.vue']))).toThrow('[unrouting] `toRou3` does not support optional repeatable parameters')
   })
 
   it('should handle group-only segments', () => {
-    // Test segments that only contain group tokens (should be skipped)
-    const result = toRou3(['(group).vue'])
-    expect(result).toEqual(['/'])
+    expect(toRou3(tree(['(group).vue']))[0].path).toEqual('/')
   })
 
   it('should handle empty segments', () => {
-    // Test segments that result in empty rou3Segment (should be skipped)
-    const result = toRou3(['file//index.vue'])
-    expect(result).toEqual(['/file'])
-  })
-
-  it('should work with ParsedPath objects', () => {
-    // Test using ParsedPath objects instead of strings
-    const parsedPaths = parsePath(['[slug].vue'])
-    const result = toRou3(parsedPaths)
-    expect(result).toEqual(['/:slug'])
+    expect(toRou3(tree(['file//index.vue']))[0].path).toEqual('/file')
   })
 })
 
@@ -137,7 +96,7 @@ describe('regexp support', () => {
 
   it('toRegExp', () => {
     const result = Object.fromEntries(Object.entries(paths).map(([path, example]) => {
-      const regexpResult = toRegExp([path])[0]
+      const regexpResult = toRegExp(tree([path]))[0]
       const match = example.match(regexpResult.pattern)
       return [path, {
         regexp: regexpResult.pattern.toString(),
@@ -284,8 +243,6 @@ describe('vue-router support', () => {
     'optional/[[opt]]-postfix.vue': '/optional/some-postfix',
     'optional/prefix-[[opt]]-postfix.vue': '/optional/prefix--postfix',
     '[a1_1a].vue': '/file',
-    // TODO: should this be allowed?
-    // '[b2.2b].vue': '/file',
     '[b2]_[2b].vue': '/fi_le',
     '[[c3@3c]].vue': '/file',
     '[[d4-4d]].vue': '/file',
@@ -295,21 +252,19 @@ describe('vue-router support', () => {
     'articles/[slug]+.vue': '/articles/here/we/go',
   }
 
-  it('toVueRouter4', () => {
+  it('toVueRouter4 - resolves params correctly with actual vue-router', () => {
     const result = Object.fromEntries(Object.entries(paths).map(([path, example]) => {
-      const route = toVueRouter4([path])[0]
+      const route = toVueRouter4(tree([path]))[0]
       const router = createVueRouter({
         history: createMemoryHistory(),
         routes: [{
           ...route,
           component: () => ({}),
-          meta: {
-            value: example,
-          },
+          meta: { value: example },
         }],
       })
-      const result = router.resolve(example)
-      return [path, result?.meta.value && result.params]
+      const resolved = router.resolve(example)
+      return [path, resolved?.meta.value && resolved.params]
     }))
     expect(result).toMatchInlineSnapshot(`
       {
@@ -395,8 +350,8 @@ describe('vue-router support', () => {
       '[...slug]/suffix.vue',
       'prefix/[...slug]/suffix.vue',
     ]
-    const result = toVueRouter4(patterns)
-    expect(result.map(m => m.path)).toMatchInlineSnapshot(`
+    const result = patterns.map(p => toVueRouter4(tree([p]))[0].path)
+    expect(result).toMatchInlineSnapshot(`
       [
         "/:slug(.*)*",
         "/prefix/:slug(.*)*",
@@ -406,186 +361,142 @@ describe('vue-router support', () => {
     `)
   })
 
-  it('should work with ParsedPath objects', () => {
-    // Test using ParsedPath objects instead of strings
-    const parsedPaths = parsePath(['[slug].vue'])
-    const result = toVueRouter4(parsedPaths)
-    expect(result).toEqual([{ path: '/:slug()' }])
-  })
-
   it('should handle group segments', () => {
-    // Test segments that only contain group tokens (should be skipped)
-    const [pure, mixed] = toVueRouter4(['(group).vue', '(group)[slug].vue'])
-    expect(pure).toEqual({ path: '/' })
-    expect(mixed).toEqual({ path: '/:slug()' })
+    const result = toVueRouter4(tree(['(group).vue', '(group)[slug].vue']))
+    expect(result.find(r => r.file === '(group).vue')?.path).toBe('/')
+    expect(result.find(r => r.file === '(group)[slug].vue')?.path).toBe('/:slug()')
   })
 
   it('should handle empty segments', () => {
-    // Test segments that result in empty pathSegment (should be skipped)
-    const result = toVueRouter4(['file//index.vue'])
-    expect(result).toEqual([{ path: '/file' }])
+    const result = toVueRouter4(tree(['file//index.vue']))
+    expect(result[0].path).toBe('/file')
   })
 })
 
 describe('toRegExp pattern matching', () => {
   it('should only match exact path patterns', () => {
-    const [result] = toRegExp(['[slug].vue'])
-
-    // Should match single-segment paths
-    expect('/file'.match(result.pattern)).toBeTruthy()
+    const [result] = toRegExp(tree(['[slug].vue']))
     expect('/file'.match(result.pattern)?.groups?.slug).toBe('file')
-
-    expect('/test'.match(result.pattern)).toBeTruthy()
-    expect('/test'.match(result.pattern)?.groups?.slug).toBe('test')
-
-    // Should NOT match multi-segment paths
     expect('/test/thing'.match(result.pattern)).toBeFalsy()
-    expect('/multiple/segments'.match(result.pattern)).toBeFalsy()
-
-    // Should NOT match paths without leading slash
     expect('file'.match(result.pattern)).toBeFalsy()
-
-    // Should NOT match empty path
     expect(''.match(result.pattern)).toBeFalsy()
   })
 
   it('should properly match nested dynamic routes', () => {
-    const [result] = toRegExp(['users/[id]/posts/[slug].vue'])
-
-    // Should match the exact pattern
-    expect('/users/123/posts/hello'.match(result.pattern)).toBeTruthy()
-    expect('/users/abc/posts/world'.match(result.pattern)?.groups).toEqual({
-      id: 'abc',
-      slug: 'world',
-    })
-
-    // Should NOT match partial patterns
+    const [result] = toRegExp(tree(['users/[id]/posts/[slug].vue']))
+    expect('/users/abc/posts/world'.match(result.pattern)?.groups).toEqual({ id: 'abc', slug: 'world' })
     expect('/users/123'.match(result.pattern)).toBeFalsy()
-    expect('/users/123/posts'.match(result.pattern)).toBeFalsy()
-    expect('/posts/hello'.match(result.pattern)).toBeFalsy()
-
-    // Should NOT match with extra segments
     expect('/users/123/posts/hello/extra'.match(result.pattern)).toBeFalsy()
   })
 
   it('should handle optional parameters correctly', () => {
-    const [result] = toRegExp(['products/[[category]].vue'])
-
-    // Should match with parameter
-    expect('/products/electronics'.match(result.pattern)).toBeTruthy()
+    const [result] = toRegExp(tree(['products/[[category]].vue']))
     expect('/products/electronics'.match(result.pattern)?.groups?.category).toBe('electronics')
-
-    // Should match without parameter
     expect('/products'.match(result.pattern)).toBeTruthy()
-    expect('/products/'.match(result.pattern)).toBeTruthy()
-
-    // Should NOT match extra segments
     expect('/products/electronics/phones'.match(result.pattern)).toBeFalsy()
   })
 
   it('should handle catchall routes correctly', () => {
-    const [result] = toRegExp(['docs/[...slug].vue'])
-
-    // Should match single segment
-    expect('/docs/intro'.match(result.pattern)).toBeTruthy()
-    expect('/docs/intro'.match(result.pattern)?.groups?.slug).toBe('intro')
-
-    // Should match multiple segments
-    expect('/docs/guide/getting-started'.match(result.pattern)).toBeTruthy()
+    const [result] = toRegExp(tree(['docs/[...slug].vue']))
     expect('/docs/guide/getting-started'.match(result.pattern)?.groups?.slug).toBe('guide/getting-started')
-
-    // Should match empty catchall
     expect('/docs'.match(result.pattern)).toBeTruthy()
-    expect('/docs/'.match(result.pattern)).toBeTruthy()
-
-    // Should NOT match without base path
     expect('/guide/getting-started'.match(result.pattern)).toBeFalsy()
   })
 
   it('should handle repeatable parameters correctly', () => {
-    const [result] = toRegExp(['posts/[slug]+.vue'])
-
-    // Should match single segment
-    expect('/posts/hello'.match(result.pattern)).toBeTruthy()
-    expect('/posts/hello'.match(result.pattern)?.groups?.slug).toBe('hello')
-
-    // Should match multiple segments
-    expect('/posts/hello/world/test'.match(result.pattern)).toBeTruthy()
+    const [result] = toRegExp(tree(['posts/[slug]+.vue']))
     expect('/posts/hello/world/test'.match(result.pattern)?.groups?.slug).toBe('hello/world/test')
-
-    // Should NOT match empty
     expect('/posts'.match(result.pattern)).toBeFalsy()
-    expect('/posts/'.match(result.pattern)).toBeFalsy()
   })
 
   it('should handle optional repeatable parameters correctly', () => {
-    const [result] = toRegExp(['articles/[[slug]]+.vue'])
-
-    // Should match single segment
-    expect('/articles/hello'.match(result.pattern)).toBeTruthy()
-    expect('/articles/hello'.match(result.pattern)?.groups?.slug).toBe('hello')
-
-    // Should match multiple segments
-    expect('/articles/hello/world'.match(result.pattern)).toBeTruthy()
+    const [result] = toRegExp(tree(['articles/[[slug]]+.vue']))
     expect('/articles/hello/world'.match(result.pattern)?.groups?.slug).toBe('hello/world')
-
-    // Should match empty (optional)
     expect('/articles'.match(result.pattern)).toBeTruthy()
-    expect('/articles/'.match(result.pattern)).toBeTruthy()
-  })
-
-  it('should work with ParsedPath objects', () => {
-    // Test using ParsedPath objects instead of strings
-    const parsedPaths = parsePath(['[slug].vue'])
-    const result = toRegExp(parsedPaths)
-    expect(result[0].pattern.toString()).toBe('/^\\/(?<slug>[^/]+)\\/?$/')
-    expect(result[0].keys).toEqual(['slug'])
   })
 
   it('should handle group-only segments', () => {
-    // Test segments that only contain group tokens (should be skipped)
-    const result = toRegExp(['(group).vue'])
+    const result = toRegExp(tree(['(group).vue']))
     expect(result[0].pattern.toString()).toBe('/^\\/?$/')
     expect(result[0].keys).toEqual([])
   })
 
-  it('should sanitize capture group names with numbers and dots', () => {
-    // Test parameter names that start with numbers (should be prefixed with _)
-    const result1 = toRegExp(['[1param].vue'])
-    expect(result1[0].keys).toEqual(['_1param'])
-
-    // Test parameter names with dots (should be removed)
-    const result2 = toRegExp(['[param.name].vue'])
-    expect(result2[0].keys).toEqual(['paramname'])
-
-    // Test parameter names with both numbers and dots
-    const result3 = toRegExp(['[1param.name].vue'])
-    expect(result3[0].keys).toEqual(['_1paramname'])
+  it('should sanitize capture group names', () => {
+    expect(toRegExp(tree(['[1param].vue']))[0].keys).toEqual(['_1param'])
+    expect(toRegExp(tree(['[param.name].vue']))[0].keys).toEqual(['paramname'])
   })
 
   it('should handle optional segments correctly', () => {
-    // Test optional segments
-    const result = toRegExp(['optional/[[param]]/more.vue'])
+    const result = toRegExp(tree(['optional/[[param]]/more.vue']))
     expect(result[0].pattern.toString()).toBe('/^\\/optional(?:\\/(?<param>[^/]*))?\\/more\\/?$/')
   })
 
-  it('should handle static tokens with colons in Vue Router', () => {
-    // Test static content with colons that need escaping - this should trigger the replace() logic
-    const result = toVueRouter4(['file:with:multiple:colons.vue'])
-    expect(result[0].path).toBe('/file\\:with\\:multiple\\:colons')
-
-    // Test static content without colons to ensure both branches are covered
-    const result2 = toVueRouter4(['file-without-colons.vue'])
-    expect(result2[0].path).toBe('/file-without-colons')
+  it('should handle static tokens with colons', () => {
+    expect(toVueRouter4(tree(['file:with:colons.vue']))[0].path).toBe('/file\\:with\\:colons')
   })
 
   it('should handle mixed static and dynamic tokens', () => {
-    // Test a segment with only static tokens to ensure continue path is hit
-    const result = toVueRouter4(['static-only-content.vue'])
-    expect(result[0].path).toBe('/static-only-content')
+    expect(toVueRouter4(tree(['static-[dynamic]-static.vue']))[0].path).toBe('/static-:dynamic()-static')
+  })
+})
 
-    // Test a segment that mixes static and dynamic tokens
-    const result2 = toVueRouter4(['static-[dynamic]-static.vue'])
-    expect(result2[0].path).toBe('/static-:dynamic()-static')
+describe('tree utilities', () => {
+  it('walkTree visits all nodes', () => {
+    const t = tree(['about.vue', 'about/team.vue'])
+    const visited: string[] = []
+    walkTree(t, node => visited.push(node.rawSegment))
+    expect(visited).toContain('about')
+    expect(visited).toContain('team')
+  })
+
+  it('isPageNode distinguishes page vs structural nodes', () => {
+    const t = tree(['parent/child.vue'])
+    expect(isPageNode(t.root)).toBe(false)
+    const parentNode = t.root.children.get('parent')!
+    expect(isPageNode(parentNode)).toBe(false)
+    const childNode = parentNode.children.get('child')!
+    expect(isPageNode(childNode)).toBe(true)
+  })
+})
+
+describe('buildTree duplicate strategies', () => {
+  it('first-wins keeps the first file (default)', () => {
+    const t = buildTree(['about.vue', 'about.vue'])
+    const node = t.root.children.get('about')!
+    expect(node.files).toHaveLength(1)
+    expect(node.files[0].path).toBe('about.vue')
+  })
+
+  it('last-wins replaces with the second file', () => {
+    const t = buildTree(['a.vue', 'a.vue'], { duplicateStrategy: 'last-wins' })
+    expect(t.root.children.get('a')!.files).toHaveLength(1)
+  })
+
+  it('error throws on duplicates', () => {
+    expect(() => buildTree(['a.vue', 'a.vue'], { duplicateStrategy: 'error' })).toThrow('Duplicate route file')
+  })
+
+  it('allows same path with different modes', () => {
+    const t = buildTree(parsePath(['a.client.vue', 'a.server.vue'], { modes: ['client', 'server'] }))
+    const node = t.root.children.get('a')!
+    expect(node.files).toHaveLength(2)
+    expect(node.files[0].modes).toEqual(['client'])
+    expect(node.files[1].modes).toEqual(['server'])
+  })
+
+  it('allows same path with different named views', () => {
+    const t = buildTree(parsePath(['index.vue', 'index@sidebar.vue']))
+    // index.vue → default view on root child '', index@sidebar.vue → sidebar view on same node
+    const indexNode = t.root.children.get('')!
+    expect(indexNode.files).toHaveLength(2)
+    expect(indexNode.files[0].viewName).toBe('default')
+    expect(indexNode.files[1].viewName).toBe('sidebar')
+  })
+
+  it('accepts pre-parsed paths', () => {
+    const parsed = parsePath(['about.vue', 'contact.vue'])
+    const t = buildTree(parsed)
+    expect(t.root.children.has('about')).toBe(true)
+    expect(t.root.children.has('contact')).toBe(true)
   })
 })

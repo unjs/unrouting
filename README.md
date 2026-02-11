@@ -7,27 +7,31 @@
 [![License][license-src]][license-href]
 [![JSDocs][jsdocs-src]][jsdocs-href]
 
-> Making filesystem routing universal
+> Universal filesystem routing
 
-## 🚧 In development
+`unrouting` parses file paths into a route tree and emits route definitions for any framework router. It handles the complete pipeline that frameworks like Nuxt implement internally — nested routes, dynamic params, catchalls, optional segments, route groups, layer merging, and more — as a standalone, framework-agnostic library.
 
-This library is a work in progress and in active development.
+## Status
 
-- [ ] generic route parsing function with options to cover major filesystem routing patterns
-  - [x] [Nuxt](https://github.com/nuxt/nuxt)
-  - [x] [unplugin-vue-router](https://github.com/posva/unplugin-vue-router) (does not include dot-syntax nesting support)
-- [ ] export capability for framework routers
+In active development. The core pipeline (parse, tree, emit) is functional and tested against Nuxt's route generation output.
+
+- [x] Generic route parsing covering major filesystem routing patterns
+  - [x] [Nuxt](https://github.com/nuxt/nuxt) / [unplugin-vue-router](https://github.com/posva/unplugin-vue-router)
+  - [ ] [SvelteKit](https://kit.svelte.dev/docs/routing)
+  - [ ] [Next.js](https://nextjs.org/docs/app/building-your-application/routing)
+- [x] Route tree with nesting, layer merging, group transparency
+- [x] Emit to framework routers
+  - [x] [`vue-router`](https://router.vuejs.org/) (nested routes, names, files, meta)
+  - [x] [rou3](http://github.com/h3js/rou3)/[Nitro](https://nitro.unjs.io/)
   - [x] RegExp patterns
-  - [x] [`vue-router`](https://router.vuejs.org/) routes
-  - [x] [rou3](http://github.com/h3js/rou3)/[Nitro](https://nitro.unjs.io/) routes
   - [ ] [SolidStart](https://start.solidjs.com/core-concepts/routing)
-  - [ ] [SvelteKit](https://kit.svelte.dev/docs/routing) routes
-- [ ] support scanning FS (with optional watch mode)
-- [ ] and more
+  - [ ] [SvelteKit](https://kit.svelte.dev/docs/routing)
+- [ ] Pluggable route name generation
+- [ ] Route ordering / priority scoring
+- [ ] Tree transformation API (for i18n, custom route manipulation)
+- [ ] Filesystem scanning (with optional watch mode)
 
-## Usage
-
-Install package:
+## Install
 
 ```sh
 # npm
@@ -37,194 +41,238 @@ npm install unrouting
 pnpm install unrouting
 ```
 
-### Basic Parsing
+## Usage
+
+The library has a three-phase pipeline: **parse** file paths into tokens, **build** a route tree, and **emit** to a target format. For most use cases you only need two function calls.
+
+### Quick start
+
+```js
+import { buildTree, toVueRouter4 } from 'unrouting'
+
+const tree = buildTree([
+  'pages/index.vue',
+  'pages/about.vue',
+  'pages/users/[id].vue',
+  'pages/users.vue',
+  'pages/[...slug].vue',
+], { roots: ['pages/'] })
+
+const routes = toVueRouter4(tree)
+// [
+//   { name: 'index', path: '/', file: 'pages/index.vue', children: [] },
+//   { name: 'about', path: '/about', file: 'pages/about.vue', children: [] },
+//   { name: 'users', path: '/users', file: 'pages/users.vue', children: [
+//     { name: 'users-id', path: ':id()', file: 'pages/users/[id].vue', children: [] },
+//   ]},
+//   { name: 'slug', path: '/:slug(.*)*', file: 'pages/[...slug].vue', children: [] },
+// ]
+```
+
+### Nuxt-like usage with layers
+
+```js
+import { buildTree, toVueRouter4 } from 'unrouting'
+
+// Files from app + layer directories
+const tree = buildTree([
+  'pages/index.vue',
+  'pages/dashboard.vue',
+  'pages/dashboard/settings.vue',
+  'layer/pages/dashboard/analytics.vue',
+], {
+  roots: ['pages/', 'layer/pages/'],
+  extensions: ['.vue'],
+  modes: ['client', 'server'],
+})
+
+const routes = toVueRouter4(tree)
+```
+
+`buildTree` accepts raw file paths and handles parsing internally in a single pass — no intermediate array allocation needed.
+
+### Emitting to different formats
+
+All emitters accept a `RouteTree`:
+
+```js
+import { buildTree, toRegExp, toRou3, toVueRouter4 } from 'unrouting'
+
+const tree = buildTree(['users/[id]/posts/[slug].vue'])
+
+// Vue Router 4 — nested routes with names, files, children
+const vueRoutes = toVueRouter4(tree)
+// [{ name: 'users-id-posts-slug', path: '/users/:id()/posts/:slug()', file: '...', children: [] }]
+
+// rou3/Nitro — flat route patterns
+const rou3Routes = toRou3(tree)
+// [{ path: '/users/:id/posts/:slug', file: '...' }]
+
+// RegExp — matcher patterns with named groups
+const regexpRoutes = toRegExp(tree)
+// [{ pattern: /^\/users\/(?<id>[^/]+)\/posts\/(?<slug>[^/]+)\/?$/, keys: ['id', 'slug'], file: '...' }]
+```
+
+### Standalone parsing
+
+If you need parsed segments without building a tree (e.g., for custom processing):
 
 ```js
 import { parsePath } from 'unrouting'
 
-// Parse file paths into segments with mode detection
 const [result] = parsePath(['users/[id]/profile.vue'])
-console.log(result.segments)
-// [
-//   [{ type: 'static', value: 'users' }],
-//   [{ type: 'dynamic', value: 'id' }],
-//   [{ type: 'static', value: 'profile' }]
-// ]
-console.log(result.meta) // undefined (no metadata detected)
+// {
+//   file: 'users/[id]/profile.vue',
+//   segments: [
+//     [{ type: 'static', value: 'users' }],
+//     [{ type: 'dynamic', value: 'id' }],
+//     [{ type: 'static', value: 'profile' }],
+//   ],
+//   meta: undefined,
+// }
 ```
 
-### Mode Detection
+## Supported patterns
 
-```js
-import { parsePath } from 'unrouting'
-
-// Configure mode detection for .server, .client suffixes
-const [result] = parsePath(['app.server.vue'], {
-  modes: ['server', 'client']
-})
-
-console.log(result.meta?.modes) // ['server']
-console.log(result.segments) // [[{ type: 'static', value: 'app' }]]
-
-// Multiple modes
-const [result2] = parsePath(['api.server.edge.js'], {
-  modes: ['server', 'client', 'edge']
-})
-console.log(result2.meta?.modes) // ['server', 'edge']
-console.log(result2.segments) // [[{ type: 'static', value: 'api' }]]
-```
-
-### Named Views
-
-```js
-import { parsePath } from 'unrouting'
-
-// Named views with @ suffix (for Vue Router named views)
-const [result] = parsePath(['dashboard@sidebar.vue'])
-console.log(result.meta?.name) // 'sidebar'
-console.log(result.segments) // [[{ type: 'static', value: 'dashboard' }]]
-
-// Named views with modes
-const [result2] = parsePath(['admin@main.client.vue'], {
-  modes: ['client', 'server']
-})
-console.log(result2.meta) // { name: 'main', modes: ['client'] }
-
-// Nested named views
-const [result3] = parsePath(['users/[id]@profile.vue'])
-console.log(result3.meta?.name) // 'profile'
-console.log(result3.segments)
-// [
-//   [{ type: 'static', value: 'users' }],
-//   [{ type: 'dynamic', value: 'id' }]
-// ]
-```
-
-### Convert to Router Formats
-
-```js
-import { parsePath, toRegExp, toRou3, toVueRouter4 } from 'unrouting'
-
-const [result] = parsePath(['users/[id]/posts/[slug].vue'])
-
-// Vue Router 4 format
-const [vueRoute] = toVueRouter4([result])
-console.log(vueRoute.path) // '/users/:id()/posts/:slug()'
-
-// Rou3/Nitro format
-const [nitroRoute] = toRou3([result])
-console.log(nitroRoute) // '/users/:id/posts/:slug'
-
-// RegExp pattern
-const [regexpRoute] = toRegExp([result])
-console.log(regexpRoute.pattern) // /^\/users\/([^\/]+)\/posts\/([^\/]+)\/?$/
-console.log(regexpRoute.keys) // ['id', 'slug']
-
-// Or pass file paths directly to converters
-const [vueRoute2] = toVueRouter4(['users/[id]/posts/[slug].vue'])
-const [nitroRoute2] = toRou3(['users/[id]/posts/[slug].vue'])
-const [regexpRoute2] = toRegExp(['users/[id]/posts/[slug].vue'])
-```
-
-### Advanced Examples
-
-```js
-import { parsePath, toRegExp, toVueRouter4 } from 'unrouting'
-
-// Repeatable parameters ([slug]+.vue -> one or more segments)
-const [repeatable] = parsePath(['posts/[slug]+.vue'])
-const [vueRoute1] = toVueRouter4([repeatable])
-console.log(vueRoute1.path) // '/posts/:slug+'
-
-// Optional repeatable parameters ([[slug]]+.vue -> zero or more segments)
-const [optionalRepeatable] = parsePath(['articles/[[slug]]+.vue'])
-const [vueRoute2] = toVueRouter4([optionalRepeatable])
-console.log(vueRoute2.path) // '/articles/:slug*'
-
-// Group segments (ignored in final path, useful for organization)
-const [grouped] = parsePath(['(admin)/(dashboard)/users/[id].vue'])
-const [vueRoute3] = toVueRouter4([grouped])
-console.log(vueRoute3.path) // '/users/:id()'
-// Groups are parsed but excluded from path generation
-
-// Catchall routes ([...slug].vue -> captures remaining path)
-const [catchall] = parsePath(['docs/[...slug].vue'])
-const [vueRoute4] = toVueRouter4([catchall])
-console.log(vueRoute4.path) // '/docs/:slug(.*)*'
-
-// Optional parameters ([[param]].vue -> parameter is optional)
-const [optional] = parsePath(['products/[[category]]/[[id]].vue'])
-const [vueRoute5] = toVueRouter4([optional])
-console.log(vueRoute5.path) // '/products/:category?/:id?'
-
-// Complex mixed patterns
-const [complex] = parsePath(['shop/[category]/product-[id]-[[variant]].vue'])
-const [vueRoute6] = toVueRouter4([complex])
-console.log(vueRoute6.path)
-// '/shop/:category()/product-:id()-:variant?'
-
-// Proper regex matching with anchoring (fixes partial match issues)
-const [pattern] = toRegExp(['[slug].vue'])
-console.log(pattern.pattern) // /^\/(?<slug>[^/]+)\/?$/
-console.log('/file'.match(pattern.pattern)) // ✅ matches
-console.log('/test/thing'.match(pattern.pattern)) // ❌ null (properly rejected)
-```
+| Pattern | Example | Description |
+|---|---|---|
+| Static | `about.vue` | Static route segment |
+| Index | `index.vue` | Index page (maps to `/`) |
+| Dynamic | `[slug].vue` | Required parameter |
+| Optional | `[[slug]].vue` | Optional parameter |
+| Catchall | `[...slug].vue` | Catch-all (zero or more segments) |
+| Repeatable | `[slug]+.vue` | One or more segments |
+| Optional repeatable | `[[slug]]+.vue` | Zero or more segments |
+| Group | `(admin)/dashboard.vue` | Route group (transparent to path, stored in meta) |
+| Mixed | `prefix-[slug]-suffix.vue` | Static and dynamic in one segment |
+| Nested | `parent.vue` + `parent/child.vue` | Parent layout with child routes |
+| Named views | `index@sidebar.vue` | Vue Router named view slots |
+| Modes | `page.client.vue` | Mode variants (configurable suffixes) |
 
 ## API
 
-### `parsePath(filePaths, options?)`
+### `buildTree(input, options?)`
 
-Parse file paths into route segments with mode detection.
+Build a route tree from file paths. Accepts raw strings (parses internally) or pre-parsed `ParsedPath[]`.
 
-**Parameters:**
-- `filePaths` (string[]): Array of file paths to parse
-- `options` (object, optional):
-  - `extensions` (string[]): File extensions to strip (default: all extensions)
-  - `modes` (string[]): Mode suffixes to detect (e.g., `['server', 'client']`)
-  - `warn` (function): Warning callback for invalid characters
-
-**Returns:** `ParsedPath[]`
 ```ts
-interface ParsedPath {
-  segments: ParsedPathSegment[]
-  meta?: {
-    modes?: string[] // Detected mode suffixes (e.g., ['client', 'server'])
-    name?: string // Named view from @name suffix
-  }
+function buildTree(input: string[] | ParsedPath[], options?: BuildTreeOptions): RouteTree
+```
+
+**Options** (extends `ParsePathOptions`):
+
+| Option | Type | Description |
+|---|---|---|
+| `roots` | `string[]` | Root paths to strip (e.g., `['pages/', 'layer/pages/']`) |
+| `extensions` | `string[]` | File extensions to strip (default: strip all) |
+| `modes` | `string[]` | Mode suffixes to detect (e.g., `['client', 'server']`) |
+| `warn` | `(msg: string) => void` | Warning callback for invalid characters |
+| `duplicateStrategy` | `'first-wins' \| 'last-wins' \| 'error'` | How to handle duplicate paths (default: `'first-wins'`) |
+
+### `toVueRouter4(tree, options?)`
+
+Emit Vue Router 4 route definitions from a tree. Handles nested routes, names, index promotion, structural collapse, groups, and catchall optimisation.
+
+```ts
+function toVueRouter4(tree: RouteTree, options?: VueRouterEmitOptions): VueRoute[]
+
+interface VueRoute {
+  name?: string
+  path: string
+  file?: string
+  children: VueRoute[]
+  meta?: Record<string, unknown>
 }
 ```
 
-### `toVueRouter4(filePaths)`
+### `toRou3(tree)`
 
-Convert parsed segments or file paths to Vue Router 4 format.
+Emit rou3/Nitro route patterns from a tree.
 
-**Parameters:**
-- `filePaths` (string[] | ParsedPath[]): Array of file paths or parsed path objects
+```ts
+function toRou3(tree: RouteTree): Rou3Route[]
 
-**Returns:** `Array<{ path: string }>`
+interface Rou3Route {
+  path: string
+  file: string
+}
+```
 
-### `toRou3(filePaths)`
+### `toRegExp(tree)`
 
-Convert parsed segments or file paths to Rou3/Nitro format.
+Emit RegExp matchers from a tree.
 
-**Parameters:**
-- `filePaths` (string[] | ParsedPath[]): Array of file paths or parsed path objects
+```ts
+function toRegExp(tree: RouteTree): RegExpRoute[]
 
-**Returns:** `string[]`
+interface RegExpRoute {
+  pattern: RegExp
+  keys: string[]
+  file: string
+}
+```
 
-### `toRegExp(filePaths)`
+### `parsePath(filePaths, options?)`
 
-Convert parsed segments or file paths to RegExp patterns.
+Parse file paths into segments. Standalone — does not build a tree.
 
-**Parameters:**
-- `filePaths` (string[] | ParsedPath[]): Array of file paths or parsed path objects
+```ts
+function parsePath(filePaths: string[], options?: ParsePathOptions): ParsedPath[]
 
-**Returns:** `Array<{ pattern: RegExp, keys: string[] }>`
+interface ParsedPath {
+  file: string
+  segments: ParsedPathSegment[]
+  meta?: { modes?: string[], name?: string }
+}
+```
 
-## 💻 Development
+### `walkTree(tree, visitor)`
+
+Walk all nodes depth-first.
+
+```ts
+function walkTree(
+  tree: RouteTree,
+  visitor: (node: RouteNode, depth: number, parent: RouteNode | null) => void
+): void
+```
+
+### `isPageNode(node)`
+
+Check if a node has files attached (page node vs structural node).
+
+```ts
+function isPageNode(node: RouteNode): boolean
+```
+
+## How nesting works
+
+The tree distinguishes between **page nodes** (have files) and **structural nodes** (directory-only, no files):
+
+- **Page nodes** create nesting boundaries — children get relative paths
+- **Structural nodes** collapse — their path segment is prepended to descendants
+
+```
+parent.vue + parent/child.vue
+  → { path: '/parent', children: [{ path: 'child' }] }
+
+parent/child.vue  (no parent.vue)
+  → { path: '/parent/child' }  (structural 'parent' collapses)
+```
+
+`index.vue` promotes a structural directory into a page node:
+
+```
+users/index.vue + users/[id].vue
+  → { path: '/users', file: 'users/index.vue', children: [{ path: ':id()' }] }
+```
+
+Route groups `(name)` are transparent — they don't affect paths or nesting, but are stored in `meta.groups`.
+
+## Development
 
 - Clone this repository
-- Enable [Corepack](https://github.com/nodejs/corepack) using `corepack enable` (use `npm i -g corepack` for Node.js < 16.10)
+- Enable [Corepack](https://github.com/nodejs/corepack) using `corepack enable`
 - Install dependencies using `pnpm install`
 - Run interactive tests using `pnpm dev`
 

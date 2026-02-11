@@ -1,4 +1,5 @@
-import { withoutLeadingSlash, withoutTrailingSlash } from 'ufo'
+import escapeStringRegexp from 'escape-string-regexp'
+import { withoutLeadingSlash, withoutTrailingSlash, withTrailingSlash } from 'ufo'
 
 /**
  * File system formats supported
@@ -26,6 +27,11 @@ export interface ParsePathOptions {
    * If not provided, no mode detection will be performed
    */
   modes?: string[]
+  /**
+   * Array of root paths to strip from the beginning of file paths.
+   * Most specific (longest matching) root gets stripped first.
+   */
+  roots?: string[]
 }
 
 export function parsePath(filePaths: string[], options: ParsePathOptions = {}): ParsedPath[] {
@@ -34,9 +40,18 @@ export function parsePath(filePaths: string[], options: ParsePathOptions = {}): 
     ? new RegExp(`\\.(${options.extensions.map(ext => ext.replace(/^\./, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`)
     : /\.\w+$/
 
+  const sortedRoots = [...options.roots || []].sort((a, b) => b.length - a.length)
+  const PREFIX_RE = sortedRoots.length > 0
+    ? new RegExp(`^(?:${sortedRoots.map(root => escapeStringRegexp(withTrailingSlash(root))).join('|')})`)
+    : undefined
+
   const parsedPaths: ParsedPath[] = []
 
   for (let filePath of filePaths) {
+    const originalFilePath = filePath
+    if (PREFIX_RE) {
+      filePath = filePath.replace(PREFIX_RE, '')
+    }
     filePath = filePath.replace(EXT_RE, '')
 
     // detect named views (@ suffix before modes/extensions)
@@ -71,7 +86,8 @@ export function parsePath(filePaths: string[], options: ParsePathOptions = {}): 
     filePath = remainingPath
 
     // add leading slash and remove trailing slash: test/ -> /test
-    const segments = withoutLeadingSlash(withoutTrailingSlash(filePath)).split('/')
+    const normalizedPath = withoutLeadingSlash(withoutTrailingSlash(filePath))
+    const segments = normalizedPath === '/' ? [''] : normalizedPath.split('/')
 
     const meta: { modes?: string[], name?: string } = {}
     if (modes.length > 0)
@@ -80,7 +96,8 @@ export function parsePath(filePaths: string[], options: ParsePathOptions = {}): 
       meta.name = namedView
 
     parsedPaths.push({
-      segments: segments.map(s => parseSegment(s, filePath, options.warn)),
+      file: originalFilePath,
+      segments: segments.map(s => parseSegment(s, originalFilePath, options.warn)),
       meta: Object.keys(meta).length > 0 ? meta : undefined,
     })
   }
@@ -94,6 +111,10 @@ export type SegmentType = 'static' | 'dynamic' | 'optional' | 'catchall' | 'grou
 export interface ParsedPathSegmentToken { type: SegmentType, value: string }
 export type ParsedPathSegment = Array<ParsedPathSegmentToken>
 export interface ParsedPath {
+  /**
+   * The full file path before processing
+   */
+  file: string
   /**
    * The parsed segments of the file path
    */
@@ -114,6 +135,11 @@ export interface ParsedPath {
 }
 
 export function parseSegment(segment: string, absolutePath?: string, warn?: (message: string) => void) {
+  // Handle empty segment case - should return a single static token with empty value
+  if (segment === '') {
+    return [{ type: 'static' as SegmentType, value: '' }]
+  }
+
   type SegmentParserState = 'initial' | SegmentType
   let state: SegmentParserState = 'initial'
   let i = 0
