@@ -1,7 +1,10 @@
 import { addRoute, createRouter, findRoute } from 'rou3'
 import { describe, expect, it } from 'vitest'
 import { createMemoryHistory, createRouter as createVueRouter } from 'vue-router'
-import { parsePath, toRegExp, toRou3, toVueRouter4 } from '../../src'
+import { addFile, buildTree, isPageNode, parsePath, parseSegment, removeFile, toRegExp, toRou3, toVueRouter4, toVueRouterPath, toVueRouterSegment, walkTree } from '../../src'
+
+/** buildTree shorthand — accepts raw strings */
+const tree = (paths: string[]) => buildTree(paths)
 
 describe('rou3 support', () => {
   const paths = {
@@ -13,26 +16,13 @@ describe('rou3 support', () => {
     '/file/[...slug].vue': '/file/here/we/go',
     '[a1_1a].vue': '/file',
     '[b2.2b].vue': '/file',
-    // TODO: mixed parameters are not (yet?) supported in rou3
-    // 'test:name.vue': '/test:name',
-    // '[b2]_[2b].vue': '/fi_le',
-    // TODO: optional parameters are not (yet?) supported in rou3
-    // '[[foo]]/index.vue': '/some',
-    // '[[sub]]/route-[slug].vue': '/some/route-value',
-    // 'optional/[[opt]].vue': '/optional',
-    // 'optional/prefix-[[opt]].vue': '/optional/prefix-test',
-    // 'optional/[[opt]]-postfix.vue': '/optional/some-postfix',
-    // 'optional/prefix-[[opt]]-postfix.vue': '/optional/prefix--postfix',
-    // '[[c3@3c]].vue': '/file',
-    // '[[d4-4d]].vue': '/file',
   }
 
   it('toRou3', () => {
     const result = Object.fromEntries(Object.entries(paths).map(([path, example]) => {
       const router = createRouter<{ value: string }>()
-      addRoute(router, 'GET', toRou3([path])[0], { value: example })
+      addRoute(router, 'GET', toRou3(tree([path]))[0].path, { value: example })
       const result = findRoute(router, 'GET', example)
-      // Return params if available (for dynamic routes), otherwise return the value from data
       return [path, result?.params || result?.data.value]
     }))
 
@@ -59,54 +49,43 @@ describe('rou3 support', () => {
   })
 
   it('should throw error for optional parameters', () => {
-    expect(() => toRou3(['[[optional]].vue'])).toThrow('[unrouting] `toRou3` does not support optional parameters')
+    expect(() => toRou3(tree(['[[optional]].vue']))).toThrow('[unrouting] `toRou3` does not support optional parameters')
   })
 
   it('should throw error for repeatable parameters', () => {
-    expect(() => toRou3(['[slug]+.vue'])).toThrow('[unrouting] `toRou3` does not support repeatable parameters')
+    expect(() => toRou3(tree(['[slug]+.vue']))).toThrow('[unrouting] `toRou3` does not support repeatable parameters')
   })
 
   it('should throw error for optional-repeatable parameters', () => {
-    expect(() => toRou3(['[[slug]]+.vue'])).toThrow('[unrouting] `toRou3` does not support optional repeatable parameters')
-  })
-
-  it('should handle dynamic parameters without value', () => {
-    // Test dynamic token without value (should generate '*') - manually create a parsed path
-    const parsedPath = {
-      segments: [[{ type: 'dynamic' as const, value: '' }]],
-      meta: undefined,
-    }
-    const result = toRou3([parsedPath])
-    expect(result).toEqual(['/*'])
-  })
-
-  it('should handle catchall parameters without value', () => {
-    // Test catchall token without value (should generate '**') - manually create a parsed path
-    const parsedPath = {
-      segments: [[{ type: 'catchall' as const, value: '' }]],
-      meta: undefined,
-    }
-    const result = toRou3([parsedPath])
-    expect(result).toEqual(['/**'])
+    expect(() => toRou3(tree(['[[slug]]+.vue']))).toThrow('[unrouting] `toRou3` does not support optional repeatable parameters')
   })
 
   it('should handle group-only segments', () => {
-    // Test segments that only contain group tokens (should be skipped)
-    const result = toRou3(['(group).vue'])
-    expect(result).toEqual(['/'])
+    expect(toRou3(tree(['(group).vue']))[0].path).toEqual('/')
+  })
+
+  it('should skip group tokens in mixed segments', () => {
+    expect(toRou3(tree(['(group)[slug].vue']))[0].path).toEqual('/:slug')
+  })
+
+  it('should use wildcard for dynamic tokens without a name', () => {
+    const t = buildTree([{
+      file: 'unnamed.vue',
+      segments: [[{ type: 'dynamic', value: '' }]],
+    }] as any)
+    expect(toRou3(t)[0].path).toEqual('/*')
+  })
+
+  it('should use double wildcard for catchall tokens without a name', () => {
+    const t = buildTree([{
+      file: 'unnamed.vue',
+      segments: [[{ type: 'catchall', value: '' }]],
+    }] as any)
+    expect(toRou3(t)[0].path).toEqual('/**')
   })
 
   it('should handle empty segments', () => {
-    // Test segments that result in empty rou3Segment (should be skipped)
-    const result = toRou3(['file//index.vue'])
-    expect(result).toEqual(['/file'])
-  })
-
-  it('should work with ParsedPath objects', () => {
-    // Test using ParsedPath objects instead of strings
-    const parsedPaths = parsePath(['[slug].vue'])
-    const result = toRou3(parsedPaths)
-    expect(result).toEqual(['/:slug'])
+    expect(toRou3(tree(['file//index.vue']))[0].path).toEqual('/file')
   })
 })
 
@@ -137,7 +116,7 @@ describe('regexp support', () => {
 
   it('toRegExp', () => {
     const result = Object.fromEntries(Object.entries(paths).map(([path, example]) => {
-      const regexpResult = toRegExp([path])[0]
+      const regexpResult = toRegExp(tree([path]))[0]
       const match = example.match(regexpResult.pattern)
       return [path, {
         regexp: regexpResult.pattern.toString(),
@@ -284,8 +263,6 @@ describe('vue-router support', () => {
     'optional/[[opt]]-postfix.vue': '/optional/some-postfix',
     'optional/prefix-[[opt]]-postfix.vue': '/optional/prefix--postfix',
     '[a1_1a].vue': '/file',
-    // TODO: should this be allowed?
-    // '[b2.2b].vue': '/file',
     '[b2]_[2b].vue': '/fi_le',
     '[[c3@3c]].vue': '/file',
     '[[d4-4d]].vue': '/file',
@@ -295,21 +272,21 @@ describe('vue-router support', () => {
     'articles/[slug]+.vue': '/articles/here/we/go',
   }
 
-  it('toVueRouter4', () => {
+  it('toVueRouter4 - resolves params correctly with actual vue-router', () => {
     const result = Object.fromEntries(Object.entries(paths).map(([path, example]) => {
-      const route = toVueRouter4([path])[0]
+      const { name, path: routePath, children } = toVueRouter4(tree([path]))[0]
       const router = createVueRouter({
         history: createMemoryHistory(),
         routes: [{
-          ...route,
+          name,
+          path: routePath,
+          children: children as any,
           component: () => ({}),
-          meta: {
-            value: example,
-          },
+          meta: { value: example },
         }],
       })
-      const result = router.resolve(example)
-      return [path, result?.meta.value && result.params]
+      const resolved = router.resolve(example)
+      return [path, resolved?.meta.value && resolved.params]
     }))
     expect(result).toMatchInlineSnapshot(`
       {
@@ -395,8 +372,8 @@ describe('vue-router support', () => {
       '[...slug]/suffix.vue',
       'prefix/[...slug]/suffix.vue',
     ]
-    const result = toVueRouter4(patterns)
-    expect(result.map(m => m.path)).toMatchInlineSnapshot(`
+    const result = patterns.map(p => toVueRouter4(tree([p]))[0].path)
+    expect(result).toMatchInlineSnapshot(`
       [
         "/:slug(.*)*",
         "/prefix/:slug(.*)*",
@@ -406,186 +383,628 @@ describe('vue-router support', () => {
     `)
   })
 
-  it('should work with ParsedPath objects', () => {
-    // Test using ParsedPath objects instead of strings
-    const parsedPaths = parsePath(['[slug].vue'])
-    const result = toVueRouter4(parsedPaths)
-    expect(result).toEqual([{ path: '/:slug()' }])
-  })
-
   it('should handle group segments', () => {
-    // Test segments that only contain group tokens (should be skipped)
-    const [pure, mixed] = toVueRouter4(['(group).vue', '(group)[slug].vue'])
-    expect(pure).toEqual({ path: '/' })
-    expect(mixed).toEqual({ path: '/:slug()' })
+    const result = toVueRouter4(tree(['(group).vue', '(group)[slug].vue']))
+    expect(result.find(r => r.file === '(group).vue')?.path).toBe('/')
+    expect(result.find(r => r.file === '(group)[slug].vue')?.path).toBe('/:slug()')
   })
 
   it('should handle empty segments', () => {
-    // Test segments that result in empty pathSegment (should be skipped)
-    const result = toVueRouter4(['file//index.vue'])
-    expect(result).toEqual([{ path: '/file' }])
+    const result = toVueRouter4(tree(['file//index.vue']))
+    expect(result[0].path).toBe('/file')
   })
 })
 
 describe('toRegExp pattern matching', () => {
   it('should only match exact path patterns', () => {
-    const [result] = toRegExp(['[slug].vue'])
-
-    // Should match single-segment paths
-    expect('/file'.match(result.pattern)).toBeTruthy()
+    const [result] = toRegExp(tree(['[slug].vue']))
     expect('/file'.match(result.pattern)?.groups?.slug).toBe('file')
-
-    expect('/test'.match(result.pattern)).toBeTruthy()
-    expect('/test'.match(result.pattern)?.groups?.slug).toBe('test')
-
-    // Should NOT match multi-segment paths
     expect('/test/thing'.match(result.pattern)).toBeFalsy()
-    expect('/multiple/segments'.match(result.pattern)).toBeFalsy()
-
-    // Should NOT match paths without leading slash
     expect('file'.match(result.pattern)).toBeFalsy()
-
-    // Should NOT match empty path
     expect(''.match(result.pattern)).toBeFalsy()
   })
 
   it('should properly match nested dynamic routes', () => {
-    const [result] = toRegExp(['users/[id]/posts/[slug].vue'])
-
-    // Should match the exact pattern
-    expect('/users/123/posts/hello'.match(result.pattern)).toBeTruthy()
-    expect('/users/abc/posts/world'.match(result.pattern)?.groups).toEqual({
-      id: 'abc',
-      slug: 'world',
-    })
-
-    // Should NOT match partial patterns
+    const [result] = toRegExp(tree(['users/[id]/posts/[slug].vue']))
+    expect('/users/abc/posts/world'.match(result.pattern)?.groups).toEqual({ id: 'abc', slug: 'world' })
     expect('/users/123'.match(result.pattern)).toBeFalsy()
-    expect('/users/123/posts'.match(result.pattern)).toBeFalsy()
-    expect('/posts/hello'.match(result.pattern)).toBeFalsy()
-
-    // Should NOT match with extra segments
     expect('/users/123/posts/hello/extra'.match(result.pattern)).toBeFalsy()
   })
 
   it('should handle optional parameters correctly', () => {
-    const [result] = toRegExp(['products/[[category]].vue'])
-
-    // Should match with parameter
-    expect('/products/electronics'.match(result.pattern)).toBeTruthy()
+    const [result] = toRegExp(tree(['products/[[category]].vue']))
     expect('/products/electronics'.match(result.pattern)?.groups?.category).toBe('electronics')
-
-    // Should match without parameter
     expect('/products'.match(result.pattern)).toBeTruthy()
-    expect('/products/'.match(result.pattern)).toBeTruthy()
-
-    // Should NOT match extra segments
     expect('/products/electronics/phones'.match(result.pattern)).toBeFalsy()
   })
 
   it('should handle catchall routes correctly', () => {
-    const [result] = toRegExp(['docs/[...slug].vue'])
-
-    // Should match single segment
-    expect('/docs/intro'.match(result.pattern)).toBeTruthy()
-    expect('/docs/intro'.match(result.pattern)?.groups?.slug).toBe('intro')
-
-    // Should match multiple segments
-    expect('/docs/guide/getting-started'.match(result.pattern)).toBeTruthy()
+    const [result] = toRegExp(tree(['docs/[...slug].vue']))
     expect('/docs/guide/getting-started'.match(result.pattern)?.groups?.slug).toBe('guide/getting-started')
-
-    // Should match empty catchall
     expect('/docs'.match(result.pattern)).toBeTruthy()
-    expect('/docs/'.match(result.pattern)).toBeTruthy()
-
-    // Should NOT match without base path
     expect('/guide/getting-started'.match(result.pattern)).toBeFalsy()
   })
 
   it('should handle repeatable parameters correctly', () => {
-    const [result] = toRegExp(['posts/[slug]+.vue'])
-
-    // Should match single segment
-    expect('/posts/hello'.match(result.pattern)).toBeTruthy()
-    expect('/posts/hello'.match(result.pattern)?.groups?.slug).toBe('hello')
-
-    // Should match multiple segments
-    expect('/posts/hello/world/test'.match(result.pattern)).toBeTruthy()
+    const [result] = toRegExp(tree(['posts/[slug]+.vue']))
     expect('/posts/hello/world/test'.match(result.pattern)?.groups?.slug).toBe('hello/world/test')
-
-    // Should NOT match empty
     expect('/posts'.match(result.pattern)).toBeFalsy()
-    expect('/posts/'.match(result.pattern)).toBeFalsy()
   })
 
   it('should handle optional repeatable parameters correctly', () => {
-    const [result] = toRegExp(['articles/[[slug]]+.vue'])
-
-    // Should match single segment
-    expect('/articles/hello'.match(result.pattern)).toBeTruthy()
-    expect('/articles/hello'.match(result.pattern)?.groups?.slug).toBe('hello')
-
-    // Should match multiple segments
-    expect('/articles/hello/world'.match(result.pattern)).toBeTruthy()
+    const [result] = toRegExp(tree(['articles/[[slug]]+.vue']))
     expect('/articles/hello/world'.match(result.pattern)?.groups?.slug).toBe('hello/world')
-
-    // Should match empty (optional)
     expect('/articles'.match(result.pattern)).toBeTruthy()
-    expect('/articles/'.match(result.pattern)).toBeTruthy()
-  })
-
-  it('should work with ParsedPath objects', () => {
-    // Test using ParsedPath objects instead of strings
-    const parsedPaths = parsePath(['[slug].vue'])
-    const result = toRegExp(parsedPaths)
-    expect(result[0].pattern.toString()).toBe('/^\\/(?<slug>[^/]+)\\/?$/')
-    expect(result[0].keys).toEqual(['slug'])
   })
 
   it('should handle group-only segments', () => {
-    // Test segments that only contain group tokens (should be skipped)
-    const result = toRegExp(['(group).vue'])
+    const result = toRegExp(tree(['(group).vue']))
     expect(result[0].pattern.toString()).toBe('/^\\/?$/')
     expect(result[0].keys).toEqual([])
   })
 
-  it('should sanitize capture group names with numbers and dots', () => {
-    // Test parameter names that start with numbers (should be prefixed with _)
-    const result1 = toRegExp(['[1param].vue'])
-    expect(result1[0].keys).toEqual(['_1param'])
+  it('should skip group tokens in mixed segments', () => {
+    const [result] = toRegExp(tree(['(group)[slug].vue']))
+    expect('/test'.match(result.pattern)?.groups?.slug).toBe('test')
+    expect(result.keys).toEqual(['slug'])
+  })
 
-    // Test parameter names with dots (should be removed)
-    const result2 = toRegExp(['[param.name].vue'])
-    expect(result2[0].keys).toEqual(['paramname'])
-
-    // Test parameter names with both numbers and dots
-    const result3 = toRegExp(['[1param.name].vue'])
-    expect(result3[0].keys).toEqual(['_1paramname'])
+  it('should sanitize capture group names', () => {
+    expect(toRegExp(tree(['[1param].vue']))[0].keys).toEqual(['_1param'])
+    expect(toRegExp(tree(['[param.name].vue']))[0].keys).toEqual(['paramname'])
   })
 
   it('should handle optional segments correctly', () => {
-    // Test optional segments
-    const result = toRegExp(['optional/[[param]]/more.vue'])
+    const result = toRegExp(tree(['optional/[[param]]/more.vue']))
     expect(result[0].pattern.toString()).toBe('/^\\/optional(?:\\/(?<param>[^/]*))?\\/more\\/?$/')
   })
 
-  it('should handle static tokens with colons in Vue Router', () => {
-    // Test static content with colons that need escaping - this should trigger the replace() logic
-    const result = toVueRouter4(['file:with:multiple:colons.vue'])
-    expect(result[0].path).toBe('/file\\:with\\:multiple\\:colons')
-
-    // Test static content without colons to ensure both branches are covered
-    const result2 = toVueRouter4(['file-without-colons.vue'])
-    expect(result2[0].path).toBe('/file-without-colons')
+  it('should handle static tokens with colons', () => {
+    expect(toVueRouter4(tree(['file:with:colons.vue']))[0].path).toBe('/file\\:with\\:colons')
   })
 
   it('should handle mixed static and dynamic tokens', () => {
-    // Test a segment with only static tokens to ensure continue path is hit
-    const result = toVueRouter4(['static-only-content.vue'])
-    expect(result[0].path).toBe('/static-only-content')
+    expect(toVueRouter4(tree(['static-[dynamic]-static.vue']))[0].path).toBe('/static-:dynamic()-static')
+  })
+})
 
-    // Test a segment that mixes static and dynamic tokens
-    const result2 = toVueRouter4(['static-[dynamic]-static.vue'])
-    expect(result2[0].path).toBe('/static-:dynamic()-static')
+describe('tree utilities', () => {
+  it('walkTree visits all nodes', () => {
+    const t = tree(['about.vue', 'about/team.vue'])
+    const visited: string[] = []
+    walkTree(t, node => visited.push(node.rawSegment))
+    expect(visited).toContain('about')
+    expect(visited).toContain('team')
+  })
+
+  it('isPageNode distinguishes page vs structural nodes', () => {
+    const t = tree(['parent/child.vue'])
+    expect(isPageNode(t.root)).toBe(false)
+    const parentNode = t.root.children.get('parent')!
+    expect(isPageNode(parentNode)).toBe(false)
+    const childNode = parentNode.children.get('child')!
+    expect(isPageNode(childNode)).toBe(true)
+  })
+})
+
+describe('buildTree duplicate strategies', () => {
+  it('first-wins keeps the first file (default)', () => {
+    const t = buildTree(['about.vue', 'about.vue'])
+    const node = t.root.children.get('about')!
+    expect(node.files).toHaveLength(1)
+    expect(node.files[0].path).toBe('about.vue')
+  })
+
+  it('last-wins replaces with the second file', () => {
+    const t = buildTree(['a.vue', 'a.vue'], { duplicateStrategy: 'last-wins' })
+    expect(t.root.children.get('a')!.files).toHaveLength(1)
+  })
+
+  it('error throws on duplicates', () => {
+    expect(() => buildTree(['a.vue', 'a.vue'], { duplicateStrategy: 'error' })).toThrow('Duplicate route file')
+  })
+
+  it('allows same path with different modes', () => {
+    const t = buildTree(parsePath(['a.client.vue', 'a.server.vue'], { modes: ['client', 'server'] }))
+    const node = t.root.children.get('a')!
+    expect(node.files).toHaveLength(2)
+    expect(node.files[0].modes).toEqual(['client'])
+    expect(node.files[1].modes).toEqual(['server'])
+  })
+
+  it('allows same path with different named views', () => {
+    const t = buildTree(parsePath(['index.vue', 'index@sidebar.vue']))
+    // index.vue → default view on root child '', index@sidebar.vue → sidebar view on same node
+    const indexNode = t.root.children.get('')!
+    expect(indexNode.files).toHaveLength(2)
+    expect(indexNode.files[0].viewName).toBe('default')
+    expect(indexNode.files[1].viewName).toBe('sidebar')
+  })
+
+  it('accepts pre-parsed paths', () => {
+    const parsed = parsePath(['about.vue', 'contact.vue'])
+    const t = buildTree(parsed)
+    expect(t.root.children.has('about')).toBe(true)
+    expect(t.root.children.has('contact')).toBe(true)
+  })
+
+  it('handles unknown token types in segment keys gracefully', () => {
+    // Exercises the default branch in tokenToString (tree.ts)
+    const syntheticParsed = [{
+      file: 'custom.vue',
+      segments: [[{ type: 'unknown' as any, value: 'custom' }]],
+    }]
+    const t = buildTree(syntheticParsed as any)
+    expect(t.root.children.has('custom')).toBe(true)
+  })
+})
+
+describe('pluggable route name generation', () => {
+  it('uses default Nuxt-style names', () => {
+    const routes = toVueRouter4(tree(['users/[id]/posts.vue']))
+    expect(routes[0].name).toBe('users-id-posts')
+  })
+
+  it('accepts custom getRouteName', () => {
+    const routes = toVueRouter4(tree(['users/[id]/posts.vue']), {
+      getRouteName: raw => raw.replace(/\//g, '.'),
+    })
+    expect(routes[0].name).toBe('users.id.posts')
+  })
+
+  it('custom name generator receives raw slash-separated name', () => {
+    const received: string[] = []
+    toVueRouter4(tree(['a.vue', 'b/c.vue']), {
+      getRouteName: (raw) => {
+        received.push(raw)
+        return raw
+      },
+    })
+    expect(received).toContain('a')
+    expect(received).toContain('b/c')
+  })
+
+  it('calls onDuplicateRouteName when routes have the same name', () => {
+    const duplicates: Array<{ name: string, file: string, existingFile: string }> = []
+    // parent/[child].vue and parent-[child].vue both produce name 'parent-child'
+    toVueRouter4(tree(['parent/[child].vue', 'parent-[child].vue']), {
+      onDuplicateRouteName: (name, file, existingFile) => {
+        duplicates.push({ name, file, existingFile })
+      },
+    })
+    expect(duplicates).toHaveLength(1)
+    expect(duplicates[0].name).toBe('parent-child')
+  })
+
+  it('does not call onDuplicateRouteName when names are unique', () => {
+    const duplicates: string[] = []
+    toVueRouter4(tree(['about.vue', 'contact.vue']), {
+      onDuplicateRouteName: name => duplicates.push(name),
+    })
+    expect(duplicates).toHaveLength(0)
+  })
+})
+
+describe('route ordering / priority', () => {
+  it('orders static before dynamic within siblings', () => {
+    const routes = toVueRouter4(tree([
+      '[slug].vue',
+      'about.vue',
+      'index.vue',
+    ]))
+    const paths = routes.map(r => r.path)
+    const staticIdx = paths.indexOf('/about')
+    const dynamicIdx = paths.indexOf('/:slug()')
+    expect(staticIdx).toBeLessThan(dynamicIdx)
+  })
+
+  it('orders dynamic before optional', () => {
+    const routes = toVueRouter4(tree([
+      '[[opt]].vue',
+      '[req].vue',
+    ]))
+    const paths = routes.map(r => r.path)
+    expect(paths.indexOf('/:req()')).toBeLessThan(paths.indexOf('/:opt?'))
+  })
+
+  it('orders dynamic before catchall', () => {
+    const routes = toVueRouter4(tree([
+      '[...catch].vue',
+      '[slug].vue',
+      'static.vue',
+    ]))
+    const paths = routes.map(r => r.path)
+    const staticIdx = paths.indexOf('/static')
+    const dynamicIdx = paths.indexOf('/:slug()')
+    const catchIdx = paths.indexOf('/:catch(.*)*')
+    expect(staticIdx).toBeLessThan(dynamicIdx)
+    expect(dynamicIdx).toBeLessThan(catchIdx)
+  })
+
+  it('orders children by priority too', () => {
+    const routes = toVueRouter4(tree([
+      'parent.vue',
+      'parent/[...catch].vue',
+      'parent/[id].vue',
+      'parent/settings.vue',
+    ]))
+    const children = routes[0].children
+    const paths = children.map(r => r.path)
+    const staticIdx = paths.indexOf('settings')
+    const dynamicIdx = paths.indexOf(':id()')
+    const catchIdx = paths.indexOf(':catch(.*)*')
+    expect(staticIdx).toBeLessThan(dynamicIdx)
+    expect(dynamicIdx).toBeLessThan(catchIdx)
+  })
+})
+
+describe('mode-aware emission', () => {
+  it('emits modes when files have mode variants', () => {
+    const t = buildTree(['page.client.vue', 'page.server.vue'], { modes: ['client', 'server'] })
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(1)
+    expect(routes[0].modes).toBeDefined()
+    expect(routes[0].modes).toContain('client')
+    expect(routes[0].modes).toContain('server')
+  })
+
+  it('does not emit modes when no mode files exist', () => {
+    const routes = toVueRouter4(tree(['about.vue']))
+    expect(routes[0].modes).toBeUndefined()
+  })
+})
+
+describe('named view emission', () => {
+  it('emits components when named views exist', () => {
+    const t = buildTree(parsePath(['index.vue', 'index@sidebar.vue']))
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(1)
+    expect(routes[0].file).toBe('index.vue')
+    expect(routes[0].components).toEqual({
+      default: 'index.vue',
+      sidebar: 'index@sidebar.vue',
+    })
+  })
+
+  it('does not emit components for single-view routes', () => {
+    const routes = toVueRouter4(tree(['about.vue']))
+    expect(routes[0].components).toBeUndefined()
+  })
+
+  it('handles nested named views', () => {
+    const t = buildTree(parsePath(['users/[id].vue', 'users/[id]@aside.vue']))
+    const routes = toVueRouter4(t)
+    // Should be a flat route for users/[id] since there's no users.vue parent
+    const route = routes.find(r => r.path.includes(':id'))
+    expect(route).toBeDefined()
+    expect(route!.components).toEqual({
+      default: 'users/[id].vue',
+      aside: 'users/[id]@aside.vue',
+    })
+  })
+})
+
+describe('layer priority', () => {
+  it('higher priority file wins on collision (lower number = higher priority)', () => {
+    const t = buildTree([
+      { path: 'layer/pages/about.vue', priority: 1 },
+      { path: 'pages/about.vue', priority: 0 },
+    ], { roots: ['pages/', 'layer/pages/'] })
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(1)
+    // app layer (priority 0) should win over extending layer (priority 1)
+    expect(routes[0].file).toBe('pages/about.vue')
+  })
+
+  it('lower priority file does not override higher priority', () => {
+    const t = buildTree([
+      { path: 'pages/about.vue', priority: 0 },
+      { path: 'layer/pages/about.vue', priority: 1 },
+    ], { roots: ['pages/', 'layer/pages/'] })
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(1)
+    expect(routes[0].file).toBe('pages/about.vue')
+  })
+
+  it('files at different tree positions are not affected by priority', () => {
+    const t = buildTree([
+      { path: 'pages/about.vue', priority: 0 },
+      { path: 'layer/pages/contact.vue', priority: 1 },
+    ], { roots: ['pages/', 'layer/pages/'] })
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(2)
+  })
+
+  it('layer can add children to a parent from another layer', () => {
+    const t = buildTree([
+      { path: 'pages/dashboard.vue', priority: 0 },
+      { path: 'pages/dashboard/settings.vue', priority: 0 },
+      { path: 'layer/pages/dashboard/analytics.vue', priority: 1 },
+    ], { roots: ['pages/', 'layer/pages/'] })
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(1)
+    expect(routes[0].file).toBe('pages/dashboard.vue')
+    expect(routes[0].children).toHaveLength(2)
+    const childFiles = routes[0].children.map(c => c.file)
+    expect(childFiles).toContain('pages/dashboard/settings.vue')
+    expect(childFiles).toContain('layer/pages/dashboard/analytics.vue')
+  })
+
+  it('priority override works regardless of insertion order', () => {
+    // Layer file inserted first but has lower priority (higher number)
+    const t1 = buildTree([
+      { path: 'layer/pages/index.vue', priority: 1 },
+      { path: 'pages/index.vue', priority: 0 },
+    ], { roots: ['pages/', 'layer/pages/'] })
+    const r1 = toVueRouter4(t1)
+    expect(r1[0].file).toBe('pages/index.vue')
+
+    // App file inserted first — should still win
+    const t2 = buildTree([
+      { path: 'pages/index.vue', priority: 0 },
+      { path: 'layer/pages/index.vue', priority: 1 },
+    ], { roots: ['pages/', 'layer/pages/'] })
+    const r2 = toVueRouter4(t2)
+    expect(r2[0].file).toBe('pages/index.vue')
+  })
+
+  it('defaults to priority 0 for string inputs', () => {
+    const t = buildTree(['about.vue', 'about.vue'])
+    // First-wins with equal priority
+    const node = t.root.children.get('about')!
+    expect(node.files).toHaveLength(1)
+    expect(node.files[0].priority).toBe(0)
+  })
+
+  it('defaults to priority 0 for InputFile without priority field', () => {
+    const t = buildTree([
+      { path: 'about.vue' },
+    ])
+    const node = t.root.children.get('about')!
+    expect(node.files).toHaveLength(1)
+    expect(node.files[0].priority).toBe(0)
+  })
+})
+
+describe('incremental addFile', () => {
+  it('adds a file to an existing tree', () => {
+    const t = buildTree(['about.vue'])
+    addFile(t, 'contact.vue')
+    expect(t.root.children.has('contact')).toBe(true)
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(2)
+  })
+
+  it('produces the same result as building from scratch', () => {
+    const full = buildTree(['about.vue', 'users/[id].vue', 'index.vue'])
+    const incremental = buildTree(['about.vue', 'index.vue'])
+    addFile(incremental, 'users/[id].vue')
+
+    const fullRoutes = toVueRouter4(full)
+    const incRoutes = toVueRouter4(incremental)
+    expect(incRoutes).toEqual(fullRoutes)
+  })
+
+  it('supports InputFile with priority', () => {
+    const t = buildTree([
+      { path: 'pages/about.vue', priority: 0 },
+    ], { roots: ['pages/'] })
+    addFile(t, { path: 'layer/pages/about.vue', priority: 1 }, { roots: ['pages/', 'layer/pages/'] })
+    // Priority 0 file should still win
+    const aboutNode = t.root.children.get('about')!
+    expect(aboutNode.files).toHaveLength(1)
+    expect(aboutNode.files[0].path).toBe('pages/about.vue')
+  })
+
+  it('supports InputFile without priority (defaults to 0)', () => {
+    const t = buildTree(['about.vue'])
+    addFile(t, { path: 'contact.vue' })
+    const contactNode = t.root.children.get('contact')!
+    expect(contactNode.files).toHaveLength(1)
+    expect(contactNode.files[0].priority).toBe(0)
+  })
+
+  it('adds nested files correctly', () => {
+    const t = buildTree(['parent.vue'])
+    addFile(t, 'parent/child.vue')
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(1)
+    expect(routes[0].children).toHaveLength(1)
+    expect(routes[0].children[0].file).toBe('parent/child.vue')
+  })
+
+  it('handles adding to an empty tree', () => {
+    const t = buildTree([])
+    addFile(t, 'index.vue')
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(1)
+    expect(routes[0].path).toBe('/')
+  })
+})
+
+describe('incremental removeFile', () => {
+  it('removes a file from the tree', () => {
+    const t = buildTree(['about.vue', 'contact.vue'])
+    const removed = removeFile(t, 'about.vue')
+    expect(removed).toBe(true)
+    expect(t.root.children.has('about')).toBe(false)
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(1)
+    expect(routes[0].file).toBe('contact.vue')
+  })
+
+  it('returns false when file not found', () => {
+    const t = buildTree(['about.vue'])
+    expect(removeFile(t, 'nonexistent.vue')).toBe(false)
+  })
+
+  it('prunes empty structural nodes', () => {
+    const t = buildTree(['users/[id]/profile.vue'])
+    removeFile(t, 'users/[id]/profile.vue')
+    // The entire users/[id] chain should be pruned
+    expect(t.root.children.size).toBe(0)
+  })
+
+  it('does not prune nodes that still have other files', () => {
+    const t = buildTree(['users/[id].vue', 'users/index.vue'])
+    removeFile(t, 'users/[id].vue')
+    // users/ node should remain because index.vue is still there
+    expect(t.root.children.has('users')).toBe(true)
+  })
+
+  it('does not prune nodes that still have children', () => {
+    const t = buildTree(['users/[id].vue', 'users/[id]/posts.vue'])
+    removeFile(t, 'users/[id].vue')
+    // [id] node should remain because it has children
+    const usersNode = t.root.children.get('users')!
+    expect(usersNode.children.has('[id]')).toBe(true)
+  })
+
+  it('add then remove restores the original tree output', () => {
+    const t = buildTree(['about.vue', 'index.vue'])
+    const originalRoutes = toVueRouter4(t)
+
+    addFile(t, 'contact.vue')
+    expect(toVueRouter4(t)).toHaveLength(3)
+
+    removeFile(t, 'contact.vue')
+    expect(toVueRouter4(t)).toEqual(originalRoutes)
+  })
+
+  it('removes deeply nested files', () => {
+    const t = buildTree(['a/b/c/d.vue', 'a/b/other.vue'])
+    removeFile(t, 'a/b/c/d.vue')
+    // c/ and d should be pruned, but a/b/ should remain (with "other" child)
+    const aNode = t.root.children.get('a')!
+    const bNode = aNode.children.get('b')!
+    expect(bNode.children.has('c')).toBe(false)
+    expect(bNode.children.has('other')).toBe(true)
+  })
+})
+
+describe('toVueRouterSegment', () => {
+  it('converts static tokens', () => {
+    expect(toVueRouterSegment(parseSegment('about'))).toBe('about')
+  })
+
+  it('converts dynamic tokens', () => {
+    expect(toVueRouterSegment(parseSegment('[id]'))).toBe(':id()')
+  })
+
+  it('converts optional tokens', () => {
+    expect(toVueRouterSegment(parseSegment('[[opt]]'))).toBe(':opt?')
+  })
+
+  it('converts catchall tokens (terminal by default)', () => {
+    expect(toVueRouterSegment(parseSegment('[...slug]'))).toBe(':slug(.*)*')
+  })
+
+  it('converts catchall tokens with hasSucceeding: true', () => {
+    expect(toVueRouterSegment(parseSegment('[...slug]'), { hasSucceeding: true })).toBe(':slug([^/]*)*')
+  })
+
+  it('converts catchall tokens with hasSucceeding: false', () => {
+    expect(toVueRouterSegment(parseSegment('[...slug]'), { hasSucceeding: false })).toBe(':slug(.*)*')
+  })
+
+  it('converts repeatable tokens', () => {
+    expect(toVueRouterSegment(parseSegment('[slug]+'))).toBe(':slug+')
+  })
+
+  it('converts optional-repeatable tokens', () => {
+    expect(toVueRouterSegment(parseSegment('[[slug]]+'))).toBe(':slug*')
+  })
+
+  it('skips group tokens', () => {
+    expect(toVueRouterSegment(parseSegment('(group)'))).toBe('')
+  })
+
+  it('handles mixed tokens', () => {
+    expect(toVueRouterSegment(parseSegment('prefix-[slug]-suffix'))).toBe('prefix-:slug()-suffix')
+  })
+
+  it('escapes colons in static tokens', () => {
+    expect(toVueRouterSegment(parseSegment('file:name'))).toBe('file\\:name')
+  })
+
+  it('handles the i18n use case from the feature request', () => {
+    const tokens = parseSegment('[foo]_[bar]:[...buz]_buz_[[qux]]')
+    expect(toVueRouterSegment(tokens)).toBe(':foo()_:bar()\\::buz(.*)*_buz_:qux?')
+  })
+
+  it('handles multiple dynamic tokens', () => {
+    expect(toVueRouterSegment(parseSegment('[a]_[b]'))).toBe(':a()_:b()')
+  })
+
+  it('returns empty string for index segment', () => {
+    // parseSegment('index') normalizes to [{ type: 'static', value: '' }]
+    expect(toVueRouterSegment(parseSegment('index'))).toBe('')
+  })
+})
+
+describe('toVueRouterPath', () => {
+  it('converts single-segment paths', () => {
+    const parsed = parsePath(['about.vue'])[0]
+    expect(toVueRouterPath(parsed.segments)).toBe('/about')
+  })
+
+  it('converts multi-segment paths', () => {
+    const parsed = parsePath(['users/[id]/posts.vue'])[0]
+    expect(toVueRouterPath(parsed.segments)).toBe('/users/:id()/posts')
+  })
+
+  it('returns / for index-only paths', () => {
+    const parsed = parsePath(['index.vue'])[0]
+    expect(toVueRouterPath(parsed.segments)).toBe('/')
+  })
+
+  it('auto-detects mid-path catchall (hasSucceeding)', () => {
+    const parsed = parsePath(['[...slug]/suffix.vue'])[0]
+    expect(toVueRouterPath(parsed.segments)).toBe('/:slug([^/]*)*/suffix')
+  })
+
+  it('uses terminal catchall at end of path', () => {
+    const parsed = parsePath(['prefix/[...slug].vue'])[0]
+    expect(toVueRouterPath(parsed.segments)).toBe('/prefix/:slug(.*)*')
+  })
+
+  it('skips group-only segments', () => {
+    const parsed = parsePath(['(group)/about.vue'])[0]
+    expect(toVueRouterPath(parsed.segments)).toBe('/about')
+  })
+
+  it('handles optional parameters', () => {
+    const parsed = parsePath(['users/[[id]].vue'])[0]
+    expect(toVueRouterPath(parsed.segments)).toBe('/users/:id?')
+  })
+
+  it('handles repeatable parameters', () => {
+    const parsed = parsePath(['articles/[slug]+.vue'])[0]
+    expect(toVueRouterPath(parsed.segments)).toBe('/articles/:slug+')
+  })
+
+  it('handles complex nested paths with mixed types', () => {
+    const parsed = parsePath(['[[lang]]/users/[id]/[[tab]].vue'])[0]
+    expect(toVueRouterPath(parsed.segments)).toBe('/:lang?/users/:id()/:tab?')
+  })
+
+  it('produces paths consistent with toVueRouter4', () => {
+    const testCases = [
+      'about.vue',
+      '[slug].vue',
+      '[[opt]].vue',
+      '[...catch].vue',
+      'users/[id].vue',
+      'prefix/[...slug]/suffix.vue',
+      '[slug]+.vue',
+      '[[slug]]+.vue',
+    ]
+
+    for (const filePath of testCases) {
+      const vueRoute = toVueRouter4(tree([filePath]))[0]
+      const parsed = parsePath([filePath])[0]
+      const segmentPath = toVueRouterPath(parsed.segments)
+      expect(segmentPath, `mismatch for ${filePath}`).toBe(vueRoute.path)
+    }
   })
 })

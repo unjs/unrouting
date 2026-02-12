@@ -14,7 +14,9 @@ export default defineConfig({
       enabled: true,
       include: ['src'],
       reporter: ['text', 'json', 'html'],
-      thresholds: { 100: true },
+      thresholds: {
+        100: true,
+      },
     },
   },
 })
