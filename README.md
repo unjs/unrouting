@@ -21,6 +21,7 @@ In active development. The core pipeline (parse, tree, emit) is functional with 
   - [ ] [Next.js](https://nextjs.org/docs/app/building-your-application/routing)
 - [x] Route tree with nesting, layer merging, group transparency
 - [x] Layer priority (multiple roots with configurable file precedence)
+- [x] Incremental tree updates (`addFile`/`removeFile` for dev server HMR)
 - [x] Pluggable route name generation
 - [x] Route ordering by segment priority (static > dynamic > optional > catchall)
 - [x] Named view support (`@viewName` convention)
@@ -121,6 +122,38 @@ const regexpRoutes = toRegExp(tree)
 // [{ pattern: /^\/users\/(?<id>[^/]+)\/posts\/(?<slug>[^/]+)\/?$/, keys: ['id', 'slug'], file: '...' }]
 ```
 
+### Incremental updates (dev server)
+
+The route tree is mutable. Instead of rebuilding everything when a file changes, use `addFile` and `removeFile` to update the tree in place — avoiding the cost of re-parsing all files and reconstructing the tree from scratch on every change.
+
+```js
+import { addFile, buildTree, removeFile, toVueRouter4 } from 'unrouting'
+
+const opts = { roots: ['pages/'], extensions: ['.vue'] }
+
+// Build once at startup
+const tree = buildTree(initialFiles, opts)
+let routes = toVueRouter4(tree)
+
+// On file add/remove (e.g., from a watcher callback)
+addFile(tree, 'pages/new-page.vue', opts)
+routes = toVueRouter4(tree)
+
+removeFile(tree, 'pages/old-page.vue')
+routes = toVueRouter4(tree)
+
+// Rename = remove + add
+removeFile(tree, 'pages/old-name.vue')
+addFile(tree, 'pages/new-name.vue', opts)
+routes = toVueRouter4(tree)
+```
+
+`addFile` supports the same `InputFile` format as `buildTree` for layer priority:
+
+```js
+addFile(tree, { path: 'layer/pages/about.vue', priority: 1 }, opts)
+```
+
 ### Standalone parsing and segment conversion
 
 If you don't need the full tree pipeline — e.g., you already have resolved routes and only need to convert individual path segments or strings to Vue Router syntax — you can use the parse + convert functions directly:
@@ -195,6 +228,26 @@ interface InputFile {
 | `duplicateStrategy` | `'first-wins' \| 'last-wins' \| 'error'` | How to handle duplicate paths (default: `'first-wins'`) |
 
 When files from different layers collide at the same tree position, the file with the lowest `priority` number wins regardless of insertion order.
+
+### `addFile(tree, filePath, options?)`
+
+Add a single file to an existing route tree in place. Parses the file and inserts it, avoiding a full rebuild. Accepts a plain string or `InputFile` with priority.
+
+```ts
+function addFile(
+  tree: RouteTree,
+  filePath: string | InputFile,
+  options?: BuildTreeOptions
+): void
+```
+
+### `removeFile(tree, filePath)`
+
+Remove a file from an existing route tree by its original file path. Prunes empty structural nodes left behind. Returns `true` if the file was found and removed.
+
+```ts
+function removeFile(tree: RouteTree, filePath: string): boolean
+```
 
 ### `toVueRouter4(tree, options?)`
 
