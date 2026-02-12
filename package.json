@@ -46,7 +46,7 @@
     "unbuild": "latest",
     "vite": "latest",
     "vitest": "latest",
-    "vue-router": "4.6.3"
+    "vue-router": "5.0.2"
   },
   "resolutions": {
     "unrouting": "link:."
