@@ -18,6 +18,11 @@ export interface RouteNodeFile {
   originalSegments: ParsedPathSegment[]
   /** Layer priority — lower number wins. @default 0 */
   priority: number
+  /**
+   * Precomputed key for duplicate detection
+   * @internal
+   */
+  _dedupeKey?: string
 }
 
 /**
@@ -130,6 +135,7 @@ function insertParsedPath(root: RouteNode, parsedPath: ParsedPath, priority: num
   const modes = parsedPath.meta?.modes
   const groupKey = groups.join(',')
   const modesKey = modes?.slice().sort().join(',') ?? ''
+  const dedupeKey = `${viewName}\0${groupKey}\0${modesKey}`
 
   const fileEntry: RouteNodeFile = {
     path: parsedPath.file,
@@ -139,14 +145,11 @@ function insertParsedPath(root: RouteNode, parsedPath: ParsedPath, priority: num
     groups: [...groups],
     originalSegments: parsedPath.segments,
     priority,
+    _dedupeKey: dedupeKey,
   }
 
   // Two files are duplicates when they share the same view, modes, and groups.
-  const existing = current.files.find((f) => {
-    return f.viewName === viewName
-      && f.groups.join(',') === groupKey
-      && (f.modes?.slice().sort().join(',') ?? '') === modesKey
-  })
+  const existing = current.files.find(f => f._dedupeKey === dedupeKey)
 
   if (!existing) {
     current.files.push(fileEntry)
@@ -160,6 +163,67 @@ function insertParsedPath(root: RouteNode, parsedPath: ParsedPath, priority: num
   const idx = current.files.indexOf(existing)
   if (strategy === 'last-wins' || priority < existing.priority)
     current.files[idx] = fileEntry
+}
+
+// --- Incremental updates -----------------------------------------------------
+
+/**
+ * Add a single file to an existing route tree.
+ *
+ * Parses the file path and inserts it into the tree in-place, avoiding a full
+ * rebuild. Useful for dev-server HMR when a file is added or renamed.
+ */
+export function addFile(
+  tree: RouteTree,
+  filePath: string | InputFile,
+  options: BuildTreeOptions = {},
+): void {
+  const path = typeof filePath === 'string' ? filePath : filePath.path
+  const priority = typeof filePath === 'string' ? 0 : (filePath.priority ?? 0)
+  const [parsed] = parsePath([path], options)
+  insertParsedPath(tree.root, parsed, priority, options)
+}
+
+/**
+ * Remove a file from an existing route tree by its original file path.
+ *
+ * Prunes empty structural nodes left behind. Returns `true` if the file was
+ * found and removed.
+ */
+export function removeFile(tree: RouteTree, filePath: string): boolean {
+  return removeFromNode(tree.root, filePath)
+}
+
+function removeFromNode(node: RouteNode, filePath: string): boolean {
+  // Check files on this node
+  const idx = node.files.findIndex(f => f.path === filePath)
+  if (idx !== -1) {
+    node.files.splice(idx, 1)
+    pruneEmptyAncestors(node)
+    return true
+  }
+
+  // Recurse into children
+  for (const child of node.children.values()) {
+    if (removeFromNode(child, filePath))
+      return true
+  }
+
+  return false
+}
+
+function pruneEmptyAncestors(node: RouteNode): void {
+  // Walk up from the node, removing any that have no files and no children
+  let current: RouteNode | null = node
+  while (current && current.parent) {
+    if (current.files.length === 0 && current.children.size === 0) {
+      current.parent.children.delete(current.rawSegment)
+      current = current.parent
+    }
+    else {
+      break
+    }
+  }
 }
 
 // --- Public utilities --------------------------------------------------------

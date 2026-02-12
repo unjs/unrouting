@@ -1,7 +1,7 @@
 import { addRoute, createRouter, findRoute } from 'rou3'
 import { describe, expect, it } from 'vitest'
 import { createMemoryHistory, createRouter as createVueRouter } from 'vue-router'
-import { buildTree, isPageNode, parsePath, toRegExp, toRou3, toVueRouter4, walkTree } from '../../src'
+import { addFile, buildTree, isPageNode, parsePath, removeFile, toRegExp, toRou3, toVueRouter4, walkTree } from '../../src'
 
 /** buildTree shorthand — accepts raw strings */
 const tree = (paths: string[]) => buildTree(paths)
@@ -718,5 +718,113 @@ describe('layer priority', () => {
     const node = t.root.children.get('about')!
     expect(node.files).toHaveLength(1)
     expect(node.files[0].priority).toBe(0)
+  })
+})
+
+describe('incremental addFile', () => {
+  it('adds a file to an existing tree', () => {
+    const t = buildTree(['about.vue'])
+    addFile(t, 'contact.vue')
+    expect(t.root.children.has('contact')).toBe(true)
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(2)
+  })
+
+  it('produces the same result as building from scratch', () => {
+    const full = buildTree(['about.vue', 'users/[id].vue', 'index.vue'])
+    const incremental = buildTree(['about.vue', 'index.vue'])
+    addFile(incremental, 'users/[id].vue')
+
+    const fullRoutes = toVueRouter4(full)
+    const incRoutes = toVueRouter4(incremental)
+    expect(incRoutes).toEqual(fullRoutes)
+  })
+
+  it('supports InputFile with priority', () => {
+    const t = buildTree([
+      { path: 'pages/about.vue', priority: 0 },
+    ], { roots: ['pages/'] })
+    addFile(t, { path: 'layer/pages/about.vue', priority: 1 }, { roots: ['pages/', 'layer/pages/'] })
+    // Priority 0 file should still win
+    const aboutNode = t.root.children.get('about')!
+    expect(aboutNode.files).toHaveLength(1)
+    expect(aboutNode.files[0].path).toBe('pages/about.vue')
+  })
+
+  it('adds nested files correctly', () => {
+    const t = buildTree(['parent.vue'])
+    addFile(t, 'parent/child.vue')
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(1)
+    expect(routes[0].children).toHaveLength(1)
+    expect(routes[0].children[0].file).toBe('parent/child.vue')
+  })
+
+  it('handles adding to an empty tree', () => {
+    const t = buildTree([])
+    addFile(t, 'index.vue')
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(1)
+    expect(routes[0].path).toBe('/')
+  })
+})
+
+describe('incremental removeFile', () => {
+  it('removes a file from the tree', () => {
+    const t = buildTree(['about.vue', 'contact.vue'])
+    const removed = removeFile(t, 'about.vue')
+    expect(removed).toBe(true)
+    expect(t.root.children.has('about')).toBe(false)
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(1)
+    expect(routes[0].file).toBe('contact.vue')
+  })
+
+  it('returns false when file not found', () => {
+    const t = buildTree(['about.vue'])
+    expect(removeFile(t, 'nonexistent.vue')).toBe(false)
+  })
+
+  it('prunes empty structural nodes', () => {
+    const t = buildTree(['users/[id]/profile.vue'])
+    removeFile(t, 'users/[id]/profile.vue')
+    // The entire users/[id] chain should be pruned
+    expect(t.root.children.size).toBe(0)
+  })
+
+  it('does not prune nodes that still have other files', () => {
+    const t = buildTree(['users/[id].vue', 'users/index.vue'])
+    removeFile(t, 'users/[id].vue')
+    // users/ node should remain because index.vue is still there
+    expect(t.root.children.has('users')).toBe(true)
+  })
+
+  it('does not prune nodes that still have children', () => {
+    const t = buildTree(['users/[id].vue', 'users/[id]/posts.vue'])
+    removeFile(t, 'users/[id].vue')
+    // [id] node should remain because it has children
+    const usersNode = t.root.children.get('users')!
+    expect(usersNode.children.has('[id]')).toBe(true)
+  })
+
+  it('add then remove restores the original tree output', () => {
+    const t = buildTree(['about.vue', 'index.vue'])
+    const originalRoutes = toVueRouter4(t)
+
+    addFile(t, 'contact.vue')
+    expect(toVueRouter4(t)).toHaveLength(3)
+
+    removeFile(t, 'contact.vue')
+    expect(toVueRouter4(t)).toEqual(originalRoutes)
+  })
+
+  it('removes deeply nested files', () => {
+    const t = buildTree(['a/b/c/d.vue', 'a/b/other.vue'])
+    removeFile(t, 'a/b/c/d.vue')
+    // c/ and d should be pruned, but a/b/ should remain (with "other" child)
+    const aNode = t.root.children.get('a')!
+    const bNode = aNode.children.get('b')!
+    expect(bNode.children.has('c')).toBe(false)
+    expect(bNode.children.has('other')).toBe(true)
   })
 })

@@ -41,6 +41,9 @@ export interface ParsedPath {
 
 // --- parsePath ---------------------------------------------------------------
 
+const VIEW_MATCH_RE = /@([\w-]+)(?:\.|$)/
+const VIEW_STRIP_RE = /@[\w-]+/
+
 export function parsePath(filePaths: string[], options: ParsePathOptions = {}): ParsedPath[] {
   const EXT_RE = options.extensions
     ? new RegExp(`\\.(${options.extensions.map(ext => ext.replace(/^\./, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`)
@@ -62,10 +65,10 @@ export function parsePath(filePaths: string[], options: ParsePathOptions = {}): 
 
     // Named views: @name suffix
     let namedView: string | undefined
-    const viewMatch = filePath.match(/@([\w-]+)(?:\.|$)/)
+    const viewMatch = filePath.match(VIEW_MATCH_RE)
     if (viewMatch) {
       namedView = viewMatch[1]
-      filePath = filePath.replace(/@[\w-]+/, '')
+      filePath = filePath.replace(VIEW_STRIP_RE, '')
     }
 
     // Modes: extract from right to left (e.g. "file.client.vapor" → ['client', 'vapor'])
@@ -87,16 +90,18 @@ export function parsePath(filePaths: string[], options: ParsePathOptions = {}): 
     const normalized = withoutLeadingSlash(withoutTrailingSlash(filePath))
     const segments = normalized === '/' ? [''] : normalized.split('/')
 
-    const meta: ParsedPath['meta'] = {}
-    if (modes.length > 0)
-      meta.modes = modes
-    if (namedView)
-      meta.name = namedView
+    const hasModes = modes.length > 0
+    const hasMeta = hasModes || !!namedView
 
     results.push({
       file: originalFilePath,
       segments: segments.map(s => parseSegment(s, originalFilePath, options.warn)),
-      meta: Object.keys(meta).length > 0 ? meta : undefined,
+      meta: hasMeta
+        ? {
+            ...(hasModes ? { modes } : undefined),
+            ...(namedView ? { name: namedView } : undefined),
+          }
+        : undefined,
     })
   }
 
@@ -104,7 +109,6 @@ export function parsePath(filePaths: string[], options: ParsePathOptions = {}): 
 }
 
 // --- parseSegment ------------------------------------------------------------
-
 const PARAM_CHAR_RE = /[\w.]/
 
 export function parseSegment(segment: string, absolutePath?: string, warn?: (message: string) => void): ParsedPathSegmentToken[] {

@@ -4,6 +4,8 @@ import type { RouteNodeFile, RouteTree } from './tree'
 import escapeStringRegexp from 'escape-string-regexp'
 import { encodePath, joinURL } from 'ufo'
 
+const collator = new Intl.Collator('en-US')
+
 // --- Types -------------------------------------------------------------------
 
 export interface VueRoute {
@@ -99,9 +101,10 @@ function flattenTree(tree: RouteTree): FlatFileInfo[] {
 export function toVueRouter4(tree: RouteTree, options?: VueRouterEmitOptions): VueRoute[] {
   const fileInfos = flattenTree(tree)
 
-  const collator = new Intl.Collator('en-US')
-  fileInfos.sort((a, b) => collator.compare(a.relativePath, b.relativePath))
-  fileInfos.sort((a, b) => a.relativePath.length - b.relativePath.length)
+  fileInfos.sort((a, b) =>
+    a.relativePath.length - b.relativePath.length
+    || collator.compare(a.relativePath, b.relativePath),
+  )
 
   const routes: IntermediateRoute[] = []
 
@@ -132,10 +135,11 @@ export function toVueRouter4(tree: RouteTree, options?: VueRouterEmitOptions): V
       const hasNextNonIndex = !!nextSeg && !isIndexSegment(nextSeg)
       const routePath = `/${generateVueRouterSegment(seg, hasNextNonIndex)}`
       const fullPath = joinURL(route.path || '/', isIndex ? '/' : routePath)
+      const normalizedFullPath = fullPath.replace('([^/]*)*', '(.*)*')
 
       const match = parent.find(r =>
         r.name === route.name
-        && r.path === fullPath.replace('([^/]*)*', '(.*)*'),
+        && r.path === normalizedFullPath,
       )
 
       if (match?.children) {
@@ -260,12 +264,10 @@ function compareRoutes(a: IntermediateRoute, b: IntermediateRoute): number {
   }
 
   // Tie-break: fewer path segments first, then alphabetical
-  const aLen = a.path.split('/').filter(Boolean).length
-  const bLen = b.path.split('/').filter(Boolean).length
-  if (aLen !== bLen)
-    return aLen - bLen
+  if (a.pathSegmentCount !== b.pathSegmentCount)
+    return a.pathSegmentCount! - b.pathSegmentCount!
 
-  return a.path.localeCompare(b.path, 'en-US')
+  return collator.compare(a.path, b.path)
 }
 
 // --- Internals ---------------------------------------------------------------
@@ -316,6 +318,7 @@ interface IntermediateRoute {
   groups: string[]
   siblingFiles: RouteNodeFile[]
   scoreSegments?: number[]
+  pathSegmentCount?: number
 }
 
 const INDEX_RE = /\/index$/
@@ -333,8 +336,10 @@ function prepareRoutes(
 ): VueRoute[] {
   const getRouteName = options?.getRouteName || defaultGetRouteName
 
-  for (const route of routes)
+  for (const route of routes) {
     route.scoreSegments = computeScoreSegments(route)
+    route.pathSegmentCount = route.path.split('/').filter(Boolean).length
+  }
   routes.sort(compareRoutes)
 
   return routes.map((route) => {

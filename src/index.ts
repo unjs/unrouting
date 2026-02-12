@@ -5,4 +5,4 @@ export type { ParsedPath, ParsedPathSegment, ParsedPathSegmentToken, ParsePathOp
 export { parsePath, parseSegment } from './parse'
 
 export type { BuildTreeOptions, InputFile, RouteNode, RouteNodeFile, RouteTree } from './tree'
-export { buildTree, isPageNode, walkTree } from './tree'
+export { addFile, buildTree, isPageNode, removeFile, walkTree } from './tree'
