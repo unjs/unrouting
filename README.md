@@ -9,11 +9,11 @@
 
 > Universal filesystem routing
 
-`unrouting` parses file paths into a route tree and emits route definitions for any framework router. It handles the complete pipeline that frameworks like Nuxt implement internally — nested routes, dynamic params, catchalls, optional segments, route groups, layer merging, and more — as a standalone, framework-agnostic library.
+`unrouting` parses file paths into a route tree and emits route definitions for any framework router. It handles nested routes, dynamic params, catchalls, optional segments, route groups, layer merging, and more – as a standalone, framework-agnostic library.
 
 ## Status
 
-In active development. The core pipeline (parse, tree, emit) is functional with 143 tests passing, validated as a drop-in replacement for Nuxt's `generateRoutesFromFiles` (52/52 Nuxt pages tests pass).
+In active development. The core pipeline (parse, tree, emit) is functional and used by Nuxt.
 
 - [x] Generic route parsing covering major filesystem routing patterns
   - [x] [Nuxt](https://github.com/nuxt/nuxt) / [unplugin-vue-router](https://github.com/posva/unplugin-vue-router)
@@ -33,8 +33,6 @@ In active development. The core pipeline (parse, tree, emit) is functional with 
   - [x] RegExp patterns
   - [ ] [SolidStart](https://start.solidjs.com/core-concepts/routing)
   - [ ] [SvelteKit](https://kit.svelte.dev/docs/routing)
-- [ ] Tree transformation API (for i18n locale expansion, custom route manipulation)
-- [ ] Filesystem scanning (with optional watch mode)
 
 ## Install
 
@@ -109,22 +107,22 @@ import { buildTree, toRegExp, toRou3, toVueRouter4 } from 'unrouting'
 
 const tree = buildTree(['users/[id]/posts/[slug].vue'])
 
-// Vue Router 4 — nested routes with names, files, children
+// Vue Router 4 – nested routes with names, files, children
 const vueRoutes = toVueRouter4(tree)
 // [{ name: 'users-id-posts-slug', path: '/users/:id()/posts/:slug()', file: '...', children: [] }]
 
-// rou3/Nitro — flat route patterns
+// rou3/Nitro – flat route patterns
 const rou3Routes = toRou3(tree)
 // [{ path: '/users/:id/posts/:slug', file: '...' }]
 
-// RegExp — matcher patterns with named groups
+// RegExp – matcher patterns with named groups
 const regexpRoutes = toRegExp(tree)
 // [{ pattern: /^\/users\/(?<id>[^/]+)\/posts\/(?<slug>[^/]+)\/?$/, keys: ['id', 'slug'], file: '...' }]
 ```
 
 ### Incremental updates (dev server)
 
-The route tree is mutable. Instead of rebuilding everything when a file changes, use `addFile` and `removeFile` to update the tree in place — avoiding the cost of re-parsing all files and reconstructing the tree from scratch on every change.
+The route tree is mutable. Instead of rebuilding everything when a file changes, use `addFile` and `removeFile` to update the tree in place – avoiding the cost of re-parsing all files and reconstructing the tree from scratch on every change.
 
 ```js
 import { addFile, buildTree, removeFile, toVueRouter4 } from 'unrouting'
@@ -156,7 +154,7 @@ addFile(tree, { path: 'layer/pages/about.vue', priority: 1 }, opts)
 
 ### Standalone parsing and segment conversion
 
-If you don't need the full tree pipeline — e.g., you already have resolved routes and only need to convert individual path segments or strings to Vue Router syntax — you can use the parse + convert functions directly:
+If you don't need the full tree pipeline – e.g., you already have resolved routes and only need to convert individual path segments or strings to Vue Router syntax – you can use the parse + convert functions directly:
 
 ```js
 import { parsePath, parseSegment, toVueRouterPath, toVueRouterSegment } from 'unrouting'
@@ -332,7 +330,7 @@ toVueRouterSegment(parseSegment('[[opt]]'))        // => ':opt?'
 toVueRouterSegment(parseSegment('[...slug]'))      // => ':slug(.*)*'
 toVueRouterSegment(parseSegment('prefix-[slug]'))  // => 'prefix-:slug()'
 
-// i18n use case — parse a custom locale path segment
+// i18n use case – parse a custom locale path segment
 const tokens = parseSegment('[foo]_[bar]:[...buz]_buz_[[qux]]')
 '/' + toVueRouterSegment(tokens)
 // => '/:foo()_:bar()\::buz(.*)*_buz_:qux?'
@@ -361,7 +359,7 @@ toVueRouterPath(parsePath(['prefix/[...slug].vue'])[0].segments)
 
 ### `parsePath(filePaths, options?)`
 
-Parse file paths into segments. Standalone — does not build a tree.
+Parse file paths into segments. Standalone – does not build a tree.
 
 ```ts
 function parsePath(filePaths: string[], options?: ParsePathOptions): ParsedPath[]
@@ -411,8 +409,8 @@ function isPageNode(node: RouteNode): boolean
 
 The tree distinguishes between **page nodes** (have files) and **structural nodes** (directory-only, no files):
 
-- **Page nodes** create nesting boundaries — children get relative paths
-- **Structural nodes** collapse — their path segment is prepended to descendants
+- **Page nodes** create nesting boundaries – children get relative paths
+- **Structural nodes** collapse – their path segment is prepended to descendants
 
 ```
 parent.vue + parent/child.vue
@@ -429,7 +427,7 @@ users/index.vue + users/[id].vue
   → { path: '/users', file: 'users/index.vue', children: [{ path: ':id()' }] }
 ```
 
-Route groups `(name)` are transparent — they don't affect paths or nesting, but are stored in `meta.groups`.
+Route groups `(name)` are transparent – they don't affect paths or nesting, but are stored in `meta.groups`.
 
 ## Development
 
