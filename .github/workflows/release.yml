@@ -1,16 +1,23 @@
 name: release
 
-permissions:
-  contents: write
-
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
+
+# Remove default permissions of GITHUB_TOKEN for security
+# https://docs.github.com/en/actions/using-jobs/assigning-permissions-to-jobs
+permissions: {}
 
 jobs:
   release:
+    concurrency:
+      group: release
+    permissions:
+      contents: write
+      id-token: write
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -19,7 +26,19 @@ jobs:
       - name: Set node
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
         with:
-          node-version: lts/*
+          node-version: latest
+
+      - name: 📦 Install dependencies
+        run: pnpm install
+
+      - name: Build (stub)
+        run: pnpm dev:prepare
+
+      - name: 🛠 Build project
+        run: pnpm build
+
+      - name: 📦 Release
+        run: pnpm publish --no-git-checks
 
       - run: npx changelogithub
         env:
