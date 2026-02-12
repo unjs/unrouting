@@ -15,10 +15,7 @@ export default defineConfig({
       include: ['src'],
       reporter: ['text', 'json', 'html'],
       thresholds: {
-        lines: 100,
-        functions: 100,
-        statements: 100,
-        branches: 95,
+        100: true,
       },
     },
   },

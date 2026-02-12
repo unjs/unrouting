@@ -166,9 +166,6 @@ export function toRou3(tree: RouteTree): Rou3Route[] {
   return flattenTree(tree).map((info) => {
     let path = '/'
     for (const segment of info.segments) {
-      if (segment.every(t => t.type === 'group'))
-        continue
-
       let part = ''
       for (const token of segment) {
         switch (token.type) {
@@ -206,13 +203,12 @@ export function toRegExp(tree: RouteTree): RegExpRoute[] {
     let source = '^'
 
     for (const segment of info.segments) {
-      if (segment.every(t => t.type === 'group'))
-        continue
-
       let re = ''
       for (const token of segment) {
         const key = sanitizeCaptureGroup(token.value)
         switch (token.type) {
+          case 'group':
+            break
           case 'static':
             re += escapeStringRegexp(token.value)
             break
@@ -264,10 +260,6 @@ function compareRoutes(a: IntermediateRoute, b: IntermediateRoute): number {
     if (sa !== sb)
       return sb - sa
   }
-
-  // Tie-break: fewer path segments first, then alphabetical
-  if (a.pathSegmentCount !== b.pathSegmentCount)
-    return a.pathSegmentCount! - b.pathSegmentCount!
 
   return collator.compare(a.path, b.path)
 }
@@ -373,7 +365,6 @@ interface IntermediateRoute {
   groups: string[]
   siblingFiles: RouteNodeFile[]
   scoreSegments?: number[]
-  pathSegmentCount?: number
 }
 
 const INDEX_RE = /\/index$/
@@ -393,7 +384,6 @@ function prepareRoutes(
 
   for (const route of routes) {
     route.scoreSegments = computeScoreSegments(route)
-    route.pathSegmentCount = route.path.split('/').filter(Boolean).length
   }
   routes.sort(compareRoutes)
 

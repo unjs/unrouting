@@ -64,6 +64,26 @@ describe('rou3 support', () => {
     expect(toRou3(tree(['(group).vue']))[0].path).toEqual('/')
   })
 
+  it('should skip group tokens in mixed segments', () => {
+    expect(toRou3(tree(['(group)[slug].vue']))[0].path).toEqual('/:slug')
+  })
+
+  it('should use wildcard for dynamic tokens without a name', () => {
+    const t = buildTree([{
+      file: 'unnamed.vue',
+      segments: [[{ type: 'dynamic', value: '' }]],
+    }] as any)
+    expect(toRou3(t)[0].path).toEqual('/*')
+  })
+
+  it('should use double wildcard for catchall tokens without a name', () => {
+    const t = buildTree([{
+      file: 'unnamed.vue',
+      segments: [[{ type: 'catchall', value: '' }]],
+    }] as any)
+    expect(toRou3(t)[0].path).toEqual('/**')
+  })
+
   it('should handle empty segments', () => {
     expect(toRou3(tree(['file//index.vue']))[0].path).toEqual('/file')
   })
@@ -423,6 +443,12 @@ describe('toRegExp pattern matching', () => {
     expect(result[0].keys).toEqual([])
   })
 
+  it('should skip group tokens in mixed segments', () => {
+    const [result] = toRegExp(tree(['(group)[slug].vue']))
+    expect('/test'.match(result.pattern)?.groups?.slug).toBe('test')
+    expect(result.keys).toEqual(['slug'])
+  })
+
   it('should sanitize capture group names', () => {
     expect(toRegExp(tree(['[1param].vue']))[0].keys).toEqual(['_1param'])
     expect(toRegExp(tree(['[param.name].vue']))[0].keys).toEqual(['paramname'])
@@ -500,6 +526,16 @@ describe('buildTree duplicate strategies', () => {
     const t = buildTree(parsed)
     expect(t.root.children.has('about')).toBe(true)
     expect(t.root.children.has('contact')).toBe(true)
+  })
+
+  it('handles unknown token types in segment keys gracefully', () => {
+    // Exercises the default branch in tokenToString (tree.ts)
+    const syntheticParsed = [{
+      file: 'custom.vue',
+      segments: [[{ type: 'unknown' as any, value: 'custom' }]],
+    }]
+    const t = buildTree(syntheticParsed as any)
+    expect(t.root.children.has('custom')).toBe(true)
   })
 })
 
@@ -719,6 +755,15 @@ describe('layer priority', () => {
     expect(node.files).toHaveLength(1)
     expect(node.files[0].priority).toBe(0)
   })
+
+  it('defaults to priority 0 for InputFile without priority field', () => {
+    const t = buildTree([
+      { path: 'about.vue' },
+    ])
+    const node = t.root.children.get('about')!
+    expect(node.files).toHaveLength(1)
+    expect(node.files[0].priority).toBe(0)
+  })
 })
 
 describe('incremental addFile', () => {
@@ -749,6 +794,14 @@ describe('incremental addFile', () => {
     const aboutNode = t.root.children.get('about')!
     expect(aboutNode.files).toHaveLength(1)
     expect(aboutNode.files[0].path).toBe('pages/about.vue')
+  })
+
+  it('supports InputFile without priority (defaults to 0)', () => {
+    const t = buildTree(['about.vue'])
+    addFile(t, { path: 'contact.vue' })
+    const contactNode = t.root.children.get('contact')!
+    expect(contactNode.files).toHaveLength(1)
+    expect(contactNode.files[0].priority).toBe(0)
   })
 
   it('adds nested files correctly', () => {
