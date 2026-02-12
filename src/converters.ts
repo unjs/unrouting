@@ -135,7 +135,7 @@ export function toVueRouter4(tree: RouteTree, options?: VueRouterEmitOptions): V
       const hasNextNonIndex = !!nextSeg && !isIndexSegment(nextSeg)
       const routePath = `/${toVueRouterSegment(seg, { hasSucceeding: hasNextNonIndex })}`
       const fullPath = joinURL(route.path || '/', isIndex ? '/' : routePath)
-      const normalizedFullPath = fullPath.replace('([^/]*)*', '(.*)*')
+      const normalizedFullPath = fullPath.replaceAll('([^/]*)*', '(.*)*')
 
       const match = parent.find(r =>
         r.name === route.name
@@ -172,6 +172,8 @@ export function toRou3(tree: RouteTree): Rou3Route[] {
       let part = ''
       for (const token of segment) {
         switch (token.type) {
+          case 'group':
+            break
           case 'static': {
             part += token.value
             break
@@ -405,10 +407,12 @@ function prepareRoutes(
     if (children.some(c => c.path === ''))
       name = undefined
 
-    if (name !== undefined && options?.onDuplicateRouteName) {
-      const existingFile = names.get(name)
-      if (existingFile)
-        options.onDuplicateRouteName(name, route.file, existingFile)
+    if (name !== undefined) {
+      if (options?.onDuplicateRouteName) {
+        const existingFile = names.get(name)
+        if (existingFile)
+          options.onDuplicateRouteName(name, route.file, existingFile)
+      }
       names.set(name, route.file)
     }
 
