@@ -1,7 +1,7 @@
 import { addRoute, createRouter, findRoute } from 'rou3'
 import { describe, expect, it } from 'vitest'
 import { createMemoryHistory, createRouter as createVueRouter } from 'vue-router'
-import { addFile, buildTree, isPageNode, parsePath, removeFile, toRegExp, toRou3, toVueRouter4, walkTree } from '../../src'
+import { addFile, buildTree, isPageNode, parsePath, parseSegment, removeFile, toRegExp, toRou3, toVueRouter4, toVueRouterPath, toVueRouterSegment, walkTree } from '../../src'
 
 /** buildTree shorthand — accepts raw strings */
 const tree = (paths: string[]) => buildTree(paths)
@@ -826,5 +826,132 @@ describe('incremental removeFile', () => {
     const bNode = aNode.children.get('b')!
     expect(bNode.children.has('c')).toBe(false)
     expect(bNode.children.has('other')).toBe(true)
+  })
+})
+
+describe('toVueRouterSegment', () => {
+  it('converts static tokens', () => {
+    expect(toVueRouterSegment(parseSegment('about'))).toBe('about')
+  })
+
+  it('converts dynamic tokens', () => {
+    expect(toVueRouterSegment(parseSegment('[id]'))).toBe(':id()')
+  })
+
+  it('converts optional tokens', () => {
+    expect(toVueRouterSegment(parseSegment('[[opt]]'))).toBe(':opt?')
+  })
+
+  it('converts catchall tokens (terminal by default)', () => {
+    expect(toVueRouterSegment(parseSegment('[...slug]'))).toBe(':slug(.*)*')
+  })
+
+  it('converts catchall tokens with hasSucceeding: true', () => {
+    expect(toVueRouterSegment(parseSegment('[...slug]'), { hasSucceeding: true })).toBe(':slug([^/]*)*')
+  })
+
+  it('converts catchall tokens with hasSucceeding: false', () => {
+    expect(toVueRouterSegment(parseSegment('[...slug]'), { hasSucceeding: false })).toBe(':slug(.*)*')
+  })
+
+  it('converts repeatable tokens', () => {
+    expect(toVueRouterSegment(parseSegment('[slug]+'))).toBe(':slug+')
+  })
+
+  it('converts optional-repeatable tokens', () => {
+    expect(toVueRouterSegment(parseSegment('[[slug]]+'))).toBe(':slug*')
+  })
+
+  it('skips group tokens', () => {
+    expect(toVueRouterSegment(parseSegment('(group)'))).toBe('')
+  })
+
+  it('handles mixed tokens', () => {
+    expect(toVueRouterSegment(parseSegment('prefix-[slug]-suffix'))).toBe('prefix-:slug()-suffix')
+  })
+
+  it('escapes colons in static tokens', () => {
+    expect(toVueRouterSegment(parseSegment('file:name'))).toBe('file\\:name')
+  })
+
+  it('handles the i18n use case from the feature request', () => {
+    const tokens = parseSegment('[foo]_[bar]:[...buz]_buz_[[qux]]')
+    expect(toVueRouterSegment(tokens)).toBe(':foo()_:bar()\\::buz(.*)*_buz_:qux?')
+  })
+
+  it('handles multiple dynamic tokens', () => {
+    expect(toVueRouterSegment(parseSegment('[a]_[b]'))).toBe(':a()_:b()')
+  })
+
+  it('returns empty string for index segment', () => {
+    // parseSegment('index') normalizes to [{ type: 'static', value: '' }]
+    expect(toVueRouterSegment(parseSegment('index'))).toBe('')
+  })
+})
+
+describe('toVueRouterPath', () => {
+  it('converts single-segment paths', () => {
+    const parsed = parsePath(['about.vue'])[0]
+    expect(toVueRouterPath(parsed.segments)).toBe('/about')
+  })
+
+  it('converts multi-segment paths', () => {
+    const parsed = parsePath(['users/[id]/posts.vue'])[0]
+    expect(toVueRouterPath(parsed.segments)).toBe('/users/:id()/posts')
+  })
+
+  it('returns / for index-only paths', () => {
+    const parsed = parsePath(['index.vue'])[0]
+    expect(toVueRouterPath(parsed.segments)).toBe('/')
+  })
+
+  it('auto-detects mid-path catchall (hasSucceeding)', () => {
+    const parsed = parsePath(['[...slug]/suffix.vue'])[0]
+    expect(toVueRouterPath(parsed.segments)).toBe('/:slug([^/]*)*/suffix')
+  })
+
+  it('uses terminal catchall at end of path', () => {
+    const parsed = parsePath(['prefix/[...slug].vue'])[0]
+    expect(toVueRouterPath(parsed.segments)).toBe('/prefix/:slug(.*)*')
+  })
+
+  it('skips group-only segments', () => {
+    const parsed = parsePath(['(group)/about.vue'])[0]
+    expect(toVueRouterPath(parsed.segments)).toBe('/about')
+  })
+
+  it('handles optional parameters', () => {
+    const parsed = parsePath(['users/[[id]].vue'])[0]
+    expect(toVueRouterPath(parsed.segments)).toBe('/users/:id?')
+  })
+
+  it('handles repeatable parameters', () => {
+    const parsed = parsePath(['articles/[slug]+.vue'])[0]
+    expect(toVueRouterPath(parsed.segments)).toBe('/articles/:slug+')
+  })
+
+  it('handles complex nested paths with mixed types', () => {
+    const parsed = parsePath(['[[lang]]/users/[id]/[[tab]].vue'])[0]
+    expect(toVueRouterPath(parsed.segments)).toBe('/:lang?/users/:id()/:tab?')
+  })
+
+  it('produces paths consistent with toVueRouter4', () => {
+    const testCases = [
+      'about.vue',
+      '[slug].vue',
+      '[[opt]].vue',
+      '[...catch].vue',
+      'users/[id].vue',
+      'prefix/[...slug]/suffix.vue',
+      '[slug]+.vue',
+      '[[slug]]+.vue',
+    ]
+
+    for (const filePath of testCases) {
+      const vueRoute = toVueRouter4(tree([filePath]))[0]
+      const parsed = parsePath([filePath])[0]
+      const segmentPath = toVueRouterPath(parsed.segments)
+      expect(segmentPath, `mismatch for ${filePath}`).toBe(vueRoute.path)
+    }
   })
 })

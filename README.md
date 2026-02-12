@@ -13,7 +13,7 @@
 
 ## Status
 
-In active development. The core pipeline (parse, tree, emit) is functional with 107 tests passing, validated as a drop-in replacement for Nuxt's `generateRoutesFromFiles` (52/52 Nuxt pages tests pass).
+In active development. The core pipeline (parse, tree, emit) is functional with 143 tests passing, validated as a drop-in replacement for Nuxt's `generateRoutesFromFiles` (52/52 Nuxt pages tests pass).
 
 - [x] Generic route parsing covering major filesystem routing patterns
   - [x] [Nuxt](https://github.com/nuxt/nuxt) / [unplugin-vue-router](https://github.com/posva/unplugin-vue-router)
@@ -121,12 +121,12 @@ const regexpRoutes = toRegExp(tree)
 // [{ pattern: /^\/users\/(?<id>[^/]+)\/posts\/(?<slug>[^/]+)\/?$/, keys: ['id', 'slug'], file: '...' }]
 ```
 
-### Standalone parsing
+### Standalone parsing and segment conversion
 
-If you need parsed segments without building a tree (e.g., for custom processing):
+If you don't need the full tree pipeline — e.g., you already have resolved routes and only need to convert individual path segments or strings to Vue Router syntax — you can use the parse + convert functions directly:
 
 ```js
-import { parsePath, parseSegment } from 'unrouting'
+import { parsePath, parseSegment, toVueRouterPath, toVueRouterSegment } from 'unrouting'
 
 // Parse a full file path
 const [result] = parsePath(['users/[id]/profile.vue'])
@@ -139,9 +139,13 @@ const [result] = parsePath(['users/[id]/profile.vue'])
 //   ],
 // }
 
-// Parse a single segment
+// Convert parsed segments to a Vue Router path
+toVueRouterPath(result.segments)  // => '/users/:id()/profile'
+
+// Parse and convert a single segment (e.g., i18n per-locale route path)
 const tokens = parseSegment('[...slug]')
 // [{ type: 'catchall', value: 'slug' }]
+toVueRouterSegment(tokens)  // => ':slug(.*)*'
 ```
 
 ## Supported patterns
@@ -246,6 +250,60 @@ interface RegExpRoute {
   keys: string[]
   file: string
 }
+```
+
+### `toVueRouterSegment(tokens, options?)`
+
+Convert a single parsed segment (an array of tokens returned by `parseSegment`) into a Vue Router 4 path segment string. Useful for modules that already have resolved routes and only need segment-level path conversion (e.g., `@nuxtjs/i18n` converting per-locale custom paths).
+
+```ts
+function toVueRouterSegment(
+  tokens: ParsedPathSegmentToken[],
+  options?: ToVueRouterSegmentOptions
+): string
+
+interface ToVueRouterSegmentOptions {
+  /**
+   * Whether non-index segments follow this one.
+   * When true, catchall uses ([^/]*)*; when false (default), uses (.*)*
+   */
+  hasSucceeding?: boolean
+}
+```
+
+```js
+import { parseSegment, toVueRouterSegment } from 'unrouting'
+
+toVueRouterSegment(parseSegment('[id]'))           // => ':id()'
+toVueRouterSegment(parseSegment('[[opt]]'))        // => ':opt?'
+toVueRouterSegment(parseSegment('[...slug]'))      // => ':slug(.*)*'
+toVueRouterSegment(parseSegment('prefix-[slug]'))  // => 'prefix-:slug()'
+
+// i18n use case — parse a custom locale path segment
+const tokens = parseSegment('[foo]_[bar]:[...buz]_buz_[[qux]]')
+'/' + toVueRouterSegment(tokens)
+// => '/:foo()_:bar()\::buz(.*)*_buz_:qux?'
+```
+
+### `toVueRouterPath(segments)`
+
+Convert an array of parsed path segments into a full Vue Router 4 path string. Automatically determines `hasSucceeding` per segment so that mid-path catchalls use the restrictive `([^/]*)*` pattern and terminal catchalls use `(.*)*`.
+
+```ts
+function toVueRouterPath(segments: ParsedPathSegment[]): string
+```
+
+```js
+import { parsePath, toVueRouterPath } from 'unrouting'
+
+toVueRouterPath(parsePath(['users/[id]/posts.vue'])[0].segments)
+// => '/users/:id()/posts'
+
+toVueRouterPath(parsePath(['[...slug]/suffix.vue'])[0].segments)
+// => '/:slug([^/]*)*/suffix'  (mid-path catchall auto-detected)
+
+toVueRouterPath(parsePath(['prefix/[...slug].vue'])[0].segments)
+// => '/prefix/:slug(.*)*'     (terminal catchall)
 ```
 
 ### `parsePath(filePaths, options?)`

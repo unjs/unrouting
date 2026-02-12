@@ -1,4 +1,4 @@
-import type { ParsedPathSegment } from './parse'
+import type { ParsedPathSegment, ParsedPathSegmentToken } from './parse'
 import type { RouteNodeFile, RouteTree } from './tree'
 
 import escapeStringRegexp from 'escape-string-regexp'
@@ -133,7 +133,7 @@ export function toVueRouter4(tree: RouteTree, options?: VueRouterEmitOptions): V
 
       const nextSeg = i < info.segments.length - 1 ? info.segments[i + 1] : undefined
       const hasNextNonIndex = !!nextSeg && !isIndexSegment(nextSeg)
-      const routePath = `/${generateVueRouterSegment(seg, hasNextNonIndex)}`
+      const routePath = `/${toVueRouterSegment(seg, { hasSucceeding: hasNextNonIndex })}`
       const fullPath = joinURL(route.path || '/', isIndex ? '/' : routePath)
       const normalizedFullPath = fullPath.replace('([^/]*)*', '(.*)*')
 
@@ -270,11 +270,32 @@ function compareRoutes(a: IntermediateRoute, b: IntermediateRoute): number {
   return collator.compare(a.path, b.path)
 }
 
-// --- Internals ---------------------------------------------------------------
+// --- Segment / path converters (public) --------------------------------------
 
-function generateVueRouterSegment(segment: ParsedPathSegment, hasSucceeding: boolean): string {
+export interface ToVueRouterSegmentOptions {
+  /**
+   * Whether there are non-index segments following this one.
+   * When `true`, catchall tokens use `([^/]*)*` (restrictive);
+   * when `false` (default), they use `(.*)*` (permissive).
+   */
+  hasSucceeding?: boolean
+}
+
+/**
+ * Convert a single parsed segment (an array of tokens returned by
+ * `parseSegment`) into a Vue Router 4 path segment string.
+ *
+ * @example
+ * const tokens = parseSegment('[id]')
+ * toVueRouterSegment(tokens) // => ':id()'
+ */
+export function toVueRouterSegment(
+  tokens: ParsedPathSegmentToken[],
+  options?: ToVueRouterSegmentOptions,
+): string {
+  const hasSucceeding = options?.hasSucceeding ?? false
   let out = ''
-  for (const token of segment) {
+  for (const token of tokens) {
     switch (token.type) {
       case 'group':
         continue
@@ -305,6 +326,38 @@ function generateVueRouterSegment(segment: ParsedPathSegment, hasSucceeding: boo
   }
   return out
 }
+
+/**
+ * Convert an array of parsed path segments into a full Vue Router 4 path
+ * string. Automatically determines `hasSucceeding` for each segment so that
+ * mid-path catchalls use the restrictive `([^/]*)*` pattern.
+ *
+ * @example
+ * const parsed = parsePath(['users/[id].vue'])[0]
+ * toVueRouterPath(parsed.segments) // => '/users/:id()'
+ */
+export function toVueRouterPath(segments: ParsedPathSegment[]): string {
+  let path = ''
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]
+
+    // Skip group-only segments (they don't produce path output)
+    if (seg.every(t => t.type === 'group'))
+      continue
+
+    // Skip index segments (single empty-string static token)
+    if (isIndexSegment(seg))
+      continue
+
+    const nextNonIndex = segments.slice(i + 1).find(s => !isIndexSegment(s) && !s.every(t => t.type === 'group'))
+    const hasSucceeding = !!nextNonIndex
+
+    path += `/${toVueRouterSegment(seg, { hasSucceeding })}`
+  }
+  return path || '/'
+}
+
+// --- Internals ---------------------------------------------------------------
 
 function isIndexSegment(tokens: ParsedPathSegment): boolean {
   return tokens.length === 1 && tokens[0].type === 'static' && tokens[0].value === ''
