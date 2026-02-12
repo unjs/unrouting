@@ -171,12 +171,12 @@ const [result] = parsePath(['users/[id]/profile.vue'])
 // }
 
 // Convert parsed segments to a Vue Router path
-toVueRouterPath(result.segments)  // => '/users/:id()/profile'
+toVueRouterPath(result.segments) // => '/users/:id()/profile'
 
 // Parse and convert a single segment (e.g., i18n per-locale route path)
 const tokens = parseSegment('[...slug]')
 // [{ type: 'catchall', value: 'slug' }]
-toVueRouterSegment(tokens)  // => ':slug(.*)*'
+toVueRouterSegment(tokens) // => ':slug(.*)*'
 ```
 
 ## Supported patterns
@@ -325,14 +325,14 @@ interface ToVueRouterSegmentOptions {
 ```js
 import { parseSegment, toVueRouterSegment } from 'unrouting'
 
-toVueRouterSegment(parseSegment('[id]'))           // => ':id()'
-toVueRouterSegment(parseSegment('[[opt]]'))        // => ':opt?'
-toVueRouterSegment(parseSegment('[...slug]'))      // => ':slug(.*)*'
-toVueRouterSegment(parseSegment('prefix-[slug]'))  // => 'prefix-:slug()'
+toVueRouterSegment(parseSegment('[id]')) // => ':id()'
+toVueRouterSegment(parseSegment('[[opt]]')) // => ':opt?'
+toVueRouterSegment(parseSegment('[...slug]')) // => ':slug(.*)*'
+toVueRouterSegment(parseSegment('prefix-[slug]')) // => 'prefix-:slug()'
 
 // i18n use case – parse a custom locale path segment
 const tokens = parseSegment('[foo]_[bar]:[...buz]_buz_[[qux]]')
-'/' + toVueRouterSegment(tokens)
+const path = `/${toVueRouterSegment(tokens)}`
 // => '/:foo()_:bar()\::buz(.*)*_buz_:qux?'
 ```
 
