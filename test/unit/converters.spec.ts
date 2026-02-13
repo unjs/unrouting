@@ -1127,11 +1127,11 @@ describe('attrs option', () => {
     expect(routes[0].modes).toBeUndefined()
   })
 
-  it('collapses multiple modes into an array attr', () => {
+  it('omits attr and emits modes when multiple modes match', () => {
     const t = buildTree(['page.client.vue', 'page.server.vue'], { modes: ['client', 'server'] })
     const routes = toVueRouter4(t, { attrs: { mode: ['client', 'server'] } })
-    expect(routes[0].mode).toEqual(['client', 'server'])
-    expect(routes[0].modes).toBeUndefined()
+    expect(routes[0].mode).toBeUndefined()
+    expect(routes[0].modes).toEqual(['client', 'server'])
   })
 
   it('does not add attr when no modes match', () => {
@@ -1177,6 +1177,44 @@ describe('attrs option', () => {
     expect(first[0].mode).toBe('server')
     expect(second[0].mode).toBe('server')
     expect(first[0]).not.toBe(second[0])
+  })
+
+  it('infers typed attrs from options', () => {
+    const t = buildTree(['page.server.vue'], { modes: ['client', 'server'] })
+    const routes = toVueRouter4(t, { attrs: { mode: ['client', 'server'] } })
+
+    // Type-level: mode is typed as 'client' | 'server' | undefined
+    const mode = routes[0].mode
+    expect(mode).toBe('server')
+
+    // Verify the type is narrow (not `unknown`)
+    if (typeof mode === 'string') {
+      // mode is 'client' | 'server' here
+      expect(['client', 'server']).toContain(mode)
+    }
+  })
+
+  it('infers typed attrs for multiple attr definitions', () => {
+    const t = buildTree(['page.client.vue'], { modes: ['client', 'server', 'get', 'post'] })
+    const routes = toVueRouter4(t, {
+      attrs: {
+        mode: ['client', 'server'],
+        method: ['get', 'post'],
+      },
+    })
+    // Both mode and method should be typed properties
+    const _mode: 'client' | 'server' | undefined = routes[0].mode
+    const _method: 'get' | 'post' | undefined = routes[0].method
+    expect(_mode).toBe('client')
+    expect(_method).toBeUndefined()
+  })
+
+  it('preserves index signature when no attrs option given', () => {
+    const t = buildTree(['page.vue'])
+    const routes = toVueRouter4(t)
+    // Without attrs, routes should still have index signature for backward compat
+    const _val: unknown = routes[0].anyProperty
+    expect(_val).toBeUndefined()
   })
 })
 

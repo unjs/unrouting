@@ -8,19 +8,34 @@ const collator = new Intl.Collator('en-US')
 
 // --- Types -------------------------------------------------------------------
 
-export interface VueRoute {
+/**
+ * Maps an `attrs` record to typed optional properties on the route.
+ *
+ * Each key becomes an optional property whose value is a single literal
+ * from the array. The attr is only set when exactly one mode matches.
+ *
+ * @example
+ * type R = InferAttrs<{ mode: ['client', 'server'] }>
+ * // { mode?: 'client' | 'server' }
+ */
+export type InferAttrs<T extends Record<string, string[]>> = {
+  [K in keyof T]?: T[K][number]
+}
+
+// eslint-disable-next-line ts/no-empty-object-type
+export type VueRoute<Attrs extends Record<string, string[]> = {}> = {
   name?: string
   path: string
   file?: string
   /** Named view files keyed by view name. Only present when named views exist. */
   components?: Record<string, string>
   modes?: string[]
-  children: VueRoute[]
+  children: VueRoute<Attrs>[]
   meta?: Record<string, unknown>
-  [key: string]: unknown
-}
+} & ([keyof Attrs] extends [never] ? { [key: string]: unknown } : InferAttrs<Attrs>)
 
-export interface VueRouterEmitOptions {
+// eslint-disable-next-line ts/no-empty-object-type
+export interface VueRouterEmitOptions<Attrs extends Record<string, string[]> = {}> {
   /**
    * Custom route name generator.
    * Receives `/`-separated name (e.g. `'users/id'`), returns final name.
@@ -32,13 +47,16 @@ export interface VueRouterEmitOptions {
   onDuplicateRouteName?: (name: string, file: string, existingFile: string) => void
 
   /**
-   * Collapse mode arrays into single-value attributes.
+   * Collapse modes into single-value attributes.
    *
-   * Each key becomes a top-level property on the route. Modes that match a
-   * value in the array are collapsed: when a route has exactly one matching
-   * mode, the attribute is set to that value string. When a route has multiple
-   * matching modes, the attribute is set to the array of matching modes.
-   * When none match, the attribute is omitted.
+   * Each key becomes a typed top-level property on the route. When a route has
+   * exactly one matching mode the attribute is set to that value string; when
+   * none or multiple modes match, the attribute is omitted and the raw `modes`
+   * array is emitted instead.
+   *
+   * The return type of `toVueRouter4` infers typed properties from the attrs
+   * definition so that, e.g., `attrs: { mode: ['client', 'server'] }` produces
+   * routes with `mode?: 'client' | 'server'`.
    *
    * @example
    * // Input: route has modes: ['server']
@@ -50,7 +68,7 @@ export interface VueRouterEmitOptions {
    * toVueRouter4(tree, { attrs: { method: ['get', 'post'] } })
    * // For a route with modes: ['get'] → { ..., method: 'get' }
    */
-  attrs?: Record<string, string[]>
+  attrs?: Attrs
 }
 
 export interface Rou3Route {
@@ -161,7 +179,7 @@ function cloneRoute(route: VueRoute): VueRoute {
   return clone
 }
 
-function optionsToKey(options?: VueRouterEmitOptions): string {
+function optionsToKey(options?: VueRouterEmitOptions<Record<string, string[]>>): string {
   if (!options)
     return ''
   const parts: string[] = []
@@ -184,12 +202,16 @@ function optionsToKey(options?: VueRouterEmitOptions): string {
  * to the returned array do not affect the cache. The cache is automatically
  * invalidated when `addFile` / `removeFile` mark the tree as dirty.
  */
-export function toVueRouter4(tree: RouteTree, options?: VueRouterEmitOptions): VueRoute[] {
-  const key = optionsToKey(options)
+export function toVueRouter4<const Attrs extends Record<string, string[]> = never>(
+  tree: RouteTree,
+  // eslint-disable-next-line ts/no-empty-object-type
+  options?: VueRouterEmitOptions<[Attrs] extends [never] ? {} : Attrs>,
+): VueRoute<[Attrs] extends [never] ? {} : Attrs>[] { // eslint-disable-line ts/no-empty-object-type
+  const key = optionsToKey(options as VueRouterEmitOptions<Record<string, string[]>>)
   const cached = (tree as any)['~cachedVueRouter'] as CachedVueRouterResult | undefined
 
   if (!tree['~dirty'] && cached && cached.optionsKey === key) {
-    return cloneRoutes(cached.routes)
+    return cloneRoutes(cached.routes) as VueRoute<any>[]
   }
 
   const fileInfos = flattenTree(tree)
@@ -250,13 +272,13 @@ export function toVueRouter4(tree: RouteTree, options?: VueRouterEmitOptions): V
     parent.push(route)
   }
 
-  const result = prepareRoutes(routes, undefined, options)
+  const result = prepareRoutes(routes, undefined, options as VueRouterEmitOptions<Record<string, string[]>>)
 
   // Cache on the tree
   ;(tree as any)['~cachedVueRouter'] = { routes: result, optionsKey: key } satisfies CachedVueRouterResult
   tree['~dirty'] = false
 
-  return cloneRoutes(result)
+  return cloneRoutes(result) as VueRoute<any>[]
 }
 
 // --- rou3 --------------------------------------------------------------------
@@ -476,7 +498,7 @@ function defaultGetRouteName(rawName: string): string {
 function prepareRoutes(
   routes: IntermediateRoute[],
   parent?: IntermediateRoute,
-  options?: VueRouterEmitOptions,
+  options?: VueRouterEmitOptions<Record<string, string[]>>,
   names = new Map<string, string>(),
 ): VueRoute[] {
   const getRouteName = options?.getRouteName || defaultGetRouteName
@@ -535,10 +557,6 @@ function prepareRoutes(
         const matched = attrValues.filter(v => allModes.has(v))
         if (matched.length === 1) {
           out[attrName] = matched[0]
-          modesConsumed = true
-        }
-        else if (matched.length > 1) {
-          out[attrName] = matched
           modesConsumed = true
         }
       }
