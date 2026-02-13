@@ -31,9 +31,6 @@ jobs:
       - name: 📦 Install dependencies
         run: pnpm install
 
-      - name: Build (stub)
-        run: pnpm dev:prepare
-
       - name: 🛠 Build project
         run: pnpm build
 
