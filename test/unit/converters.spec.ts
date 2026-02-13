@@ -1,7 +1,7 @@
 import { addRoute, createRouter, findRoute } from 'rou3'
 import { describe, expect, it } from 'vitest'
 import { createMemoryHistory, createRouter as createVueRouter } from 'vue-router'
-import { addFile, buildTree, isPageNode, parsePath, parseSegment, removeFile, toRegExp, toRou3, toVueRouter4, toVueRouterPath, toVueRouterSegment, walkTree } from '../../src'
+import { addFile, buildTree, compileParsePath, isPageNode, parsePath, parseSegment, removeFile, toRegExp, toRou3, toVueRouter4, toVueRouterPath, toVueRouterSegment, walkTree } from '../../src'
 
 /** buildTree shorthand — accepts raw strings */
 const tree = (paths: string[]) => buildTree(paths)
@@ -1006,5 +1006,327 @@ describe('toVueRouterPath', () => {
       const segmentPath = toVueRouterPath(parsed.segments)
       expect(segmentPath, `mismatch for ${filePath}`).toBe(vueRoute.path)
     }
+  })
+})
+
+describe('toVueRouter4 caching', () => {
+  it('returns equivalent output on repeated calls without mutation', () => {
+    const t = buildTree(['about.vue', 'contact.vue'])
+    const first = toVueRouter4(t)
+    const second = toVueRouter4(t)
+    expect(second).toEqual(first)
+  })
+
+  it('returns a new array reference each time (safe for mutation)', () => {
+    const t = buildTree(['about.vue'])
+    const first = toVueRouter4(t)
+    const second = toVueRouter4(t)
+    expect(first).not.toBe(second)
+  })
+
+  it('returned routes can be mutated without affecting subsequent calls', () => {
+    const t = buildTree(['about.vue', 'contact.vue'])
+    const first = toVueRouter4(t)
+    first.push({ path: '/injected', file: 'injected.vue', children: [] })
+    first[0].name = 'mutated'
+
+    const second = toVueRouter4(t)
+    expect(second).toHaveLength(2)
+    expect(second[0].name).toBe('about')
+  })
+
+  it('invalidates cache when addFile is called', () => {
+    const t = buildTree(['about.vue'])
+    const first = toVueRouter4(t)
+    expect(first).toHaveLength(1)
+
+    addFile(t, 'contact.vue')
+    const second = toVueRouter4(t)
+    expect(second).toHaveLength(2)
+  })
+
+  it('invalidates cache when removeFile is called', () => {
+    const t = buildTree(['about.vue', 'contact.vue'])
+    const first = toVueRouter4(t)
+    expect(first).toHaveLength(2)
+
+    removeFile(t, 'about.vue')
+    const second = toVueRouter4(t)
+    expect(second).toHaveLength(1)
+    expect(second[0].file).toBe('contact.vue')
+  })
+
+  it('invalidates cache when options change', () => {
+    const t = buildTree(['about.vue'])
+    const first = toVueRouter4(t)
+    expect(first[0].name).toBe('about')
+
+    const second = toVueRouter4(t, { getRouteName: raw => raw.toUpperCase() })
+    expect(second[0].name).toBe('ABOUT')
+  })
+
+  it('clones children deeply', () => {
+    const t = buildTree(['parent.vue', 'parent/child.vue'])
+    const first = toVueRouter4(t)
+    const second = toVueRouter4(t)
+    expect(first[0].children).not.toBe(second[0].children)
+    expect(first[0].children[0]).not.toBe(second[0].children[0])
+    expect(first[0].children).toEqual(second[0].children)
+  })
+
+  it('clones meta and components', () => {
+    const t = buildTree(parsePath(['(group)/about.vue', 'index.vue', 'index@sidebar.vue']))
+    const first = toVueRouter4(t)
+    const second = toVueRouter4(t)
+
+    const groupRoute = first.find(r => r.meta?.groups)!
+    const sidebarRoute = first.find(r => r.components)!
+
+    expect(groupRoute.meta).not.toBe(second.find(r => r.meta?.groups)!.meta)
+    expect(sidebarRoute.components).not.toBe(second.find(r => r.components)!.components)
+  })
+
+  it('clones modes array', () => {
+    const t = buildTree(['page.client.vue'], { modes: ['client', 'server'] })
+    const first = toVueRouter4(t)
+    const second = toVueRouter4(t)
+    expect(first[0].modes).not.toBe(second[0].modes)
+    expect(first[0].modes).toEqual(second[0].modes)
+  })
+
+  it('clones route with meta but no groups (defensive)', () => {
+    const t = buildTree(parsePath(['(group)/about.vue']))
+    // First call: populate cache with default options (key = '')
+    const first = toVueRouter4(t)
+    expect(first[0].meta?.groups).toEqual(['group'])
+
+    // Mutate the cached template to remove groups from meta
+    // This exercises the clone path where meta exists but has no groups
+    const cached = (t as any)['~cachedVueRouter']
+    cached.routes[0].meta = { customKey: 'value' }
+
+    // Second call with same options — should use cache and clone
+    const cloned = toVueRouter4(t)
+    expect(cloned[0].meta).toEqual({ customKey: 'value' })
+    expect(cloned[0].meta!.groups).toBeUndefined()
+  })
+})
+
+describe('attrs option', () => {
+  it('collapses single mode into an attr', () => {
+    const t = buildTree(['page.server.vue'], { modes: ['client', 'server'] })
+    const routes = toVueRouter4(t, { attrs: { mode: ['client', 'server'] } })
+    expect(routes[0].mode).toBe('server')
+    expect(routes[0].modes).toBeUndefined()
+  })
+
+  it('collapses single client mode into an attr', () => {
+    const t = buildTree(['page.client.vue'], { modes: ['client', 'server'] })
+    const routes = toVueRouter4(t, { attrs: { mode: ['client', 'server'] } })
+    expect(routes[0].mode).toBe('client')
+    expect(routes[0].modes).toBeUndefined()
+  })
+
+  it('collapses multiple modes into an array attr', () => {
+    const t = buildTree(['page.client.vue', 'page.server.vue'], { modes: ['client', 'server'] })
+    const routes = toVueRouter4(t, { attrs: { mode: ['client', 'server'] } })
+    expect(routes[0].mode).toEqual(['client', 'server'])
+    expect(routes[0].modes).toBeUndefined()
+  })
+
+  it('does not add attr when no modes match', () => {
+    const t = buildTree(['about.vue'])
+    const routes = toVueRouter4(t, { attrs: { mode: ['client', 'server'] } })
+    expect(routes[0].mode).toBeUndefined()
+    expect(routes[0].modes).toBeUndefined()
+  })
+
+  it('supports custom attr names', () => {
+    const t = buildTree(['api.get.vue'], { modes: ['get', 'post'] })
+    const routes = toVueRouter4(t, { attrs: { method: ['get', 'post'] } })
+    expect(routes[0].method).toBe('get')
+    expect(routes[0].modes).toBeUndefined()
+  })
+
+  it('supports multiple attr definitions', () => {
+    const t = buildTree(['page.client.vue'], { modes: ['client', 'server', 'dark', 'light'] })
+    const routes = toVueRouter4(t, {
+      attrs: {
+        mode: ['client', 'server'],
+        theme: ['dark', 'light'],
+      },
+    })
+    expect(routes[0].mode).toBe('client')
+    expect(routes[0].theme).toBeUndefined()
+    expect(routes[0].modes).toBeUndefined()
+  })
+
+  it('preserves modes when no attr values match', () => {
+    const t = buildTree(['page.vapor.vue'], { modes: ['vapor', 'client'] })
+    const routes = toVueRouter4(t, { attrs: { method: ['get', 'post'] } })
+    // vapor doesn't match any method attr value
+    expect(routes[0].method).toBeUndefined()
+    expect(routes[0].modes).toEqual(['vapor'])
+  })
+
+  it('attrs are cloned on cached return', () => {
+    const t = buildTree(['page.server.vue'], { modes: ['client', 'server'] })
+    const opts = { attrs: { mode: ['client', 'server'] } }
+    const first = toVueRouter4(t, opts)
+    const second = toVueRouter4(t, opts)
+    expect(first[0].mode).toBe('server')
+    expect(second[0].mode).toBe('server')
+    expect(first[0]).not.toBe(second[0])
+  })
+})
+
+describe('compileParsePath', () => {
+  it('produces the same result as parsePath', () => {
+    const options = { roots: ['pages/'], modes: ['client', 'server'] }
+    const paths = ['pages/index.vue', 'pages/about.client.vue', 'pages/[slug].vue']
+    const compiled = compileParsePath(options)
+    expect(compiled(paths)).toEqual(parsePath(paths, options))
+  })
+
+  it('works with addFile', () => {
+    const compiled = compileParsePath({ roots: ['pages/'] })
+    const t = buildTree([{ path: 'pages/about.vue' }], { roots: ['pages/'] })
+    addFile(t, { path: 'pages/contact.vue' }, compiled)
+    const routes = toVueRouter4(t)
+    expect(routes).toHaveLength(2)
+  })
+
+  it('has ~compiled marker', () => {
+    const compiled = compileParsePath()
+    expect(compiled['~compiled']).toBe(true)
+  })
+})
+
+describe('compileParsePath edge cases', () => {
+  it('compiles with custom extensions', () => {
+    const compiled = compileParsePath({ extensions: ['.vue', '.tsx'] })
+    const result = compiled(['about.vue', 'contact.tsx'])
+    expect(result).toHaveLength(2)
+    expect(result[0].segments[0][0]).toEqual({ type: 'static', value: 'about' })
+    expect(result[1].segments[0][0]).toEqual({ type: 'static', value: 'contact' })
+  })
+
+  it('compiles with warn function', () => {
+    const warnings: string[] = []
+    const compiled = compileParsePath({ warn: msg => warnings.push(msg) })
+    compiled(['[param#invalid].vue'])
+    expect(warnings).toHaveLength(1)
+  })
+
+  it('compiles with modes', () => {
+    const compiled = compileParsePath({ modes: ['client', 'server'] })
+    const result = compiled(['app.client.vue'])
+    expect(result[0].meta?.modes).toEqual(['client'])
+  })
+
+  it('compiles with multiple roots (exercises sort callback)', () => {
+    const compiled = compileParsePath({ roots: ['pages/', 'layer/pages/'] })
+    const result = compiled(['pages/about.vue', 'layer/pages/contact.vue'])
+    expect(result).toHaveLength(2)
+    expect(result[0].segments[0][0]).toEqual({ type: 'static', value: 'about' })
+    expect(result[1].segments[0][0]).toEqual({ type: 'static', value: 'contact' })
+  })
+})
+
+describe('file index for removeFile', () => {
+  it('uses file index for O(1) removal', () => {
+    const t = buildTree(['a/b/c/deep.vue', 'other.vue'])
+    expect(t['~fileIndex'].size).toBe(2)
+    expect(t['~fileIndex'].has('a/b/c/deep.vue')).toBe(true)
+    expect(t['~fileIndex'].has('other.vue')).toBe(true)
+
+    removeFile(t, 'a/b/c/deep.vue')
+    expect(t['~fileIndex'].has('a/b/c/deep.vue')).toBe(false)
+    expect(t['~fileIndex'].has('other.vue')).toBe(true)
+  })
+
+  it('updates file index on addFile', () => {
+    const t = buildTree(['about.vue'])
+    expect(t['~fileIndex'].size).toBe(1)
+
+    addFile(t, 'contact.vue')
+    expect(t['~fileIndex'].size).toBe(2)
+    expect(t['~fileIndex'].has('contact.vue')).toBe(true)
+  })
+
+  it('file index tracks layer priority overrides', () => {
+    const t = buildTree([
+      { path: 'layer/pages/about.vue', priority: 1 },
+      { path: 'pages/about.vue', priority: 0 },
+    ], { roots: ['pages/', 'layer/pages/'] })
+    // Only the winning file should be in the index
+    expect(t['~fileIndex'].has('pages/about.vue')).toBe(true)
+    expect(t['~fileIndex'].has('layer/pages/about.vue')).toBe(false)
+  })
+})
+
+describe('removeFile dfs fallback', () => {
+  it('falls back to dfs when file is not in index', () => {
+    const t = buildTree(['about.vue', 'contact.vue'])
+    // Manually remove from index to simulate missing entry
+    t['~fileIndex'].delete('about.vue')
+    const removed = removeFile(t, 'about.vue')
+    expect(removed).toBe(true)
+    expect(t.root.children.has('about')).toBe(false)
+    expect(t['~dirty']).toBe(true)
+  })
+
+  it('dfs fallback returns false when file not found', () => {
+    const t = buildTree(['about.vue'])
+    t['~fileIndex'].clear()
+    const removed = removeFile(t, 'nonexistent.vue')
+    expect(removed).toBe(false)
+  })
+
+  it('handles stale file index entry (node no longer has the file)', () => {
+    const t = buildTree(['about.vue', 'contact.vue'])
+    // Corrupt: index points to node but node's files were cleared
+    const node = t['~fileIndex'].get('about.vue')!
+    node.files = []
+    // removeFile should fall through index fast-path and try dfs fallback
+    const removed = removeFile(t, 'about.vue')
+    expect(removed).toBe(false)
+  })
+})
+
+describe('dirty flag', () => {
+  it('tree starts dirty after buildTree', () => {
+    const t = buildTree(['about.vue'])
+    expect(t['~dirty']).toBe(true)
+  })
+
+  it('toVueRouter4 clears dirty flag', () => {
+    const t = buildTree(['about.vue'])
+    toVueRouter4(t)
+    expect(t['~dirty']).toBe(false)
+  })
+
+  it('addFile sets dirty flag', () => {
+    const t = buildTree(['about.vue'])
+    toVueRouter4(t)
+    expect(t['~dirty']).toBe(false)
+    addFile(t, 'contact.vue')
+    expect(t['~dirty']).toBe(true)
+  })
+
+  it('removeFile sets dirty flag', () => {
+    const t = buildTree(['about.vue', 'contact.vue'])
+    toVueRouter4(t)
+    expect(t['~dirty']).toBe(false)
+    removeFile(t, 'about.vue')
+    expect(t['~dirty']).toBe(true)
+  })
+
+  it('removeFile does not set dirty when file not found', () => {
+    const t = buildTree(['about.vue'])
+    toVueRouter4(t)
+    expect(t['~dirty']).toBe(false)
+    removeFile(t, 'nonexistent.vue')
+    expect(t['~dirty']).toBe(false)
   })
 })

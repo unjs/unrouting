@@ -17,6 +17,7 @@ export interface VueRoute {
   modes?: string[]
   children: VueRoute[]
   meta?: Record<string, unknown>
+  [key: string]: unknown
 }
 
 export interface VueRouterEmitOptions {
@@ -29,6 +30,27 @@ export interface VueRouterEmitOptions {
 
   /** Called when two routes resolve to the same generated name. */
   onDuplicateRouteName?: (name: string, file: string, existingFile: string) => void
+
+  /**
+   * Collapse mode arrays into single-value attributes.
+   *
+   * Each key becomes a top-level property on the route. Modes that match a
+   * value in the array are collapsed: when a route has exactly one matching
+   * mode, the attribute is set to that value string. When a route has multiple
+   * matching modes, the attribute is set to the array of matching modes.
+   * When none match, the attribute is omitted.
+   *
+   * @example
+   * // Input: route has modes: ['server']
+   * toVueRouter4(tree, { attrs: { mode: ['client', 'server'] } })
+   * // Output: { ..., mode: 'server' }  (no `modes` property)
+   *
+   * @example
+   * // Custom method-based routing
+   * toVueRouter4(tree, { attrs: { method: ['get', 'post'] } })
+   * // For a route with modes: ['get'] → { ..., method: 'get' }
+   */
+  attrs?: Record<string, string[]>
 }
 
 export interface Rou3Route {
@@ -96,9 +118,80 @@ function flattenTree(tree: RouteTree): FlatFileInfo[] {
 // --- Vue Router 4 ------------------------------------------------------------
 
 /**
+ * Cached intermediate result stored on the tree.
+ * @internal
+ */
+interface CachedVueRouterResult {
+  /** The computed routes (used as template for cloning). */
+  routes: VueRoute[]
+  /** The options fingerprint — if options change, cache is invalid. */
+  optionsKey: string
+}
+
+/** Deep-clone a VueRoute array. */
+function cloneRoutes(routes: VueRoute[]): VueRoute[] {
+  return routes.map(r => cloneRoute(r))
+}
+
+function cloneRoute(route: VueRoute): VueRoute {
+  const clone: VueRoute = {
+    path: route.path,
+    file: route.file,
+    children: route.children.length ? cloneRoutes(route.children) : [],
+  }
+  if (route.name !== undefined)
+    clone.name = route.name
+  if (route.modes)
+    clone.modes = [...route.modes]
+  if (route.meta) {
+    clone.meta = { ...route.meta }
+    if (route.meta.groups)
+      clone.meta.groups = [...(route.meta.groups as string[])]
+  }
+  if (route.components)
+    clone.components = { ...route.components }
+
+  // Clone any extra attrs (e.g. mode, method)
+  for (const key of Object.keys(route)) {
+    if (!(key in clone)) {
+      clone[key] = route[key]
+    }
+  }
+
+  return clone
+}
+
+function optionsToKey(options?: VueRouterEmitOptions): string {
+  if (!options)
+    return ''
+  const parts: string[] = []
+  if (options.getRouteName)
+    parts.push('n')
+  if (options.onDuplicateRouteName)
+    parts.push('d')
+  if (options.attrs) {
+    for (const [k, v] of Object.entries(options.attrs)) {
+      parts.push(`a:${k}=${v.join(',')}`)
+    }
+  }
+  return parts.join('|')
+}
+
+/**
  * Convert a route tree to Vue Router 4 route definitions.
+ *
+ * Results are cached on the tree and deep-cloned on return, so mutations
+ * to the returned array do not affect the cache. The cache is automatically
+ * invalidated when `addFile` / `removeFile` mark the tree as dirty.
  */
 export function toVueRouter4(tree: RouteTree, options?: VueRouterEmitOptions): VueRoute[] {
+  const key = optionsToKey(options)
+  const cached = (tree as any)['~cachedVueRouter'] as CachedVueRouterResult | undefined
+
+  if (!tree['~dirty'] && cached && cached.optionsKey === key) {
+    return cloneRoutes(cached.routes)
+  }
+
   const fileInfos = flattenTree(tree)
 
   fileInfos.sort((a, b) =>
@@ -157,7 +250,13 @@ export function toVueRouter4(tree: RouteTree, options?: VueRouterEmitOptions): V
     parent.push(route)
   }
 
-  return prepareRoutes(routes, undefined, options)
+  const result = prepareRoutes(routes, undefined, options)
+
+  // Cache on the tree
+  ;(tree as any)['~cachedVueRouter'] = { routes: result, optionsKey: key } satisfies CachedVueRouterResult
+  tree['~dirty'] = false
+
+  return cloneRoutes(result)
 }
 
 // --- rou3 --------------------------------------------------------------------
@@ -381,6 +480,7 @@ function prepareRoutes(
   names = new Map<string, string>(),
 ): VueRoute[] {
   const getRouteName = options?.getRouteName || defaultGetRouteName
+  const attrs = options?.attrs
 
   for (const route of routes) {
     route.scoreSegments = computeScoreSegments(route)
@@ -420,15 +520,35 @@ function prepareRoutes(
         out.components[v.viewName] = v.path
     }
 
-    // Modes
+    // Collect modes from all sibling files
     const allModes = new Set<string>()
     for (const f of route.siblingFiles) {
       if (f.modes) {
         for (const m of f.modes) allModes.add(m)
       }
     }
-    if (allModes.size > 0)
+
+    // Apply attrs: collapse modes into named attributes
+    if (attrs && allModes.size > 0) {
+      let modesConsumed = false
+      for (const [attrName, attrValues] of Object.entries(attrs)) {
+        const matched = attrValues.filter(v => allModes.has(v))
+        if (matched.length === 1) {
+          out[attrName] = matched[0]
+          modesConsumed = true
+        }
+        else if (matched.length > 1) {
+          out[attrName] = matched
+          modesConsumed = true
+        }
+      }
+      // Only emit `modes` if not fully consumed by attrs
+      if (!modesConsumed)
+        out.modes = [...allModes]
+    }
+    else if (allModes.size > 0) {
       out.modes = [...allModes]
+    }
 
     return out
   })

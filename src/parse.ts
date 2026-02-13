@@ -43,11 +43,12 @@ export interface ParsedPath {
 
 const VIEW_MATCH_RE = /@([\w-]+)(?:\.|$)/
 const VIEW_STRIP_RE = /@[\w-]+/
+const DEFAULT_EXT_RE = /\.\w+$/
 
 export function parsePath(filePaths: string[], options: ParsePathOptions = {}): ParsedPath[] {
   const EXT_RE = options.extensions
     ? new RegExp(`\\.(${options.extensions.map(ext => ext.replace(/^\./, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`)
-    : /\.\w+$/
+    : DEFAULT_EXT_RE
 
   const sortedRoots = [...options.roots || []].sort((a, b) => b.length - a.length)
   const PREFIX_RE = sortedRoots.length > 0
@@ -55,6 +56,54 @@ export function parsePath(filePaths: string[], options: ParsePathOptions = {}): 
     : undefined
 
   const supportedModes = options.modes || []
+
+  return parsePathInner(filePaths, EXT_RE, PREFIX_RE, supportedModes, options.warn)
+}
+
+/**
+ * Pre-compile parsing options for repeated calls.
+ *
+ * Returns a callable that has the same signature as `parsePath` (minus options)
+ * but reuses pre-built regexes and mode lists, avoiding re-compilation on each
+ * invocation.
+ *
+ * @example
+ * const parse = compileParsePath({ roots: ['pages/'], modes: ['client', 'server'] })
+ * const result = parse(['pages/index.vue'])
+ */
+export interface CompiledParsePath {
+  (filePaths: string[]): ParsedPath[]
+  /**
+   * @internal
+   */
+  '~compiled': true
+}
+
+export function compileParsePath(options: ParsePathOptions = {}): CompiledParsePath {
+  const EXT_RE = options.extensions
+    ? new RegExp(`\\.(${options.extensions.map(ext => ext.replace(/^\./, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`)
+    : DEFAULT_EXT_RE
+
+  const sortedRoots = [...options.roots || []].sort((a, b) => b.length - a.length)
+  const PREFIX_RE = sortedRoots.length > 0
+    ? new RegExp(`^(?:${sortedRoots.map(root => escapeStringRegexp(withTrailingSlash(root))).join('|')})`)
+    : undefined
+
+  const supportedModes = options.modes || []
+  const warn = options.warn
+
+  const fn = (filePaths: string[]) => parsePathInner(filePaths, EXT_RE, PREFIX_RE, supportedModes, warn)
+  ;(fn as CompiledParsePath)['~compiled'] = true
+  return fn as CompiledParsePath
+}
+
+function parsePathInner(
+  filePaths: string[],
+  EXT_RE: RegExp,
+  PREFIX_RE: RegExp | undefined,
+  supportedModes: string[],
+  warn?: (message: string) => void,
+): ParsedPath[] {
   const results: ParsedPath[] = []
 
   for (let filePath of filePaths) {
@@ -95,7 +144,7 @@ export function parsePath(filePaths: string[], options: ParsePathOptions = {}): 
 
     results.push({
       file: originalFilePath,
-      segments: segments.map(s => parseSegment(s, originalFilePath, options.warn)),
+      segments: segments.map(s => parseSegment(s, originalFilePath, warn)),
       meta: hasMeta
         ? {
             ...(hasModes ? { modes } : undefined),

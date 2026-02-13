@@ -371,6 +371,42 @@ interface ParsedPath {
 }
 ```
 
+### `compileParsePath(options?)`
+
+Pre-compile parsing options into a reusable function. Useful in hot paths (e.g., dev server file watchers) where `parsePath` would otherwise reconstruct the same regexes on every call.
+
+```ts
+function compileParsePath(options?: ParsePathOptions): CompiledParsePath
+
+interface CompiledParsePath {
+  (filePaths: string[]): ParsedPath[]
+}
+```
+
+Returns a callable with the same signature as `parsePath` (minus the options argument). The regexes for root stripping, extension matching, and mode detection are built once at compile time.
+
+```js
+import { addFile, buildTree, compileParsePath, toVueRouter4 } from 'unrouting'
+
+const opts = { roots: ['pages/'], modes: ['client', 'server'] }
+
+// Compile once at startup
+const parse = compileParsePath(opts)
+const tree = buildTree(initialFiles, opts)
+
+// In a file watcher callback — no regex re-compilation
+addFile(tree, 'pages/new-page.vue', parse)
+const routes = toVueRouter4(tree)
+```
+
+The compiled function can be passed directly to `addFile` as the options argument:
+
+```js
+// These are equivalent, but the compiled version avoids re-building regexes:
+addFile(tree, file, parse) // pre-compiled (fast)
+addFile(tree, file, opts) // raw options (re-compiles each call)
+```
+
 ### `parseSegment(segment, absolutePath?, warn?)`
 
 Parse a single filesystem segment into typed tokens. Useful for modules that need to parse custom paths (e.g., i18n locale-specific routes).

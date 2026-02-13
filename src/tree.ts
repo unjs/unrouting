@@ -1,28 +1,28 @@
-import type { ParsedPath, ParsedPathSegment, ParsePathOptions } from './parse'
+import type { CompiledParsePath, ParsedPath, ParsedPathSegment, ParsePathOptions } from './parse'
 import { parsePath } from './parse'
 
 // --- Types -------------------------------------------------------------------
 
 export interface RouteNodeFile {
   /** Original file path (before root stripping / extension removal) */
-  path: string
+  'path': string
   /** Relative path reconstructed from parsed segments (for sorting) */
-  relativePath: string
+  'relativePath': string
   /** Named view slot (`'default'` unless `@name` suffix was used) */
-  viewName: string
+  'viewName': string
   /** Mode variants (e.g. `['client']`, `['server']`) */
-  modes?: string[]
+  'modes'?: string[]
   /** Route group names from transparent group segments */
-  groups: string[]
+  'groups': string[]
   /** Original parsed segments (including groups) */
-  originalSegments: ParsedPathSegment[]
+  'originalSegments': ParsedPathSegment[]
   /** Layer priority — lower number wins. @default 0 */
-  priority: number
+  'priority': number
   /**
    * Precomputed key for duplicate detection
    * @internal
    */
-  _dedupeKey?: string
+  '~dedupeKey'?: string
 }
 
 /**
@@ -62,7 +62,20 @@ export interface BuildTreeOptions extends ParsePathOptions {
 }
 
 export interface RouteTree {
-  root: RouteNode
+  'root': RouteNode
+  /**
+   * Whether the tree has been modified since the last converter output.
+   * Set to `true` by `addFile` / `removeFile` / `buildTree`.
+   * Converters (e.g. `toVueRouter4`) can set this to `false` after caching.
+   * @internal
+   */
+  '~dirty': boolean
+  /**
+   * Index from file path to the node that contains it.
+   * Enables O(1) lookup for `removeFile`.
+   * @internal
+   */
+  '~fileIndex': Map<string, RouteNode>
 }
 
 // --- Tree construction -------------------------------------------------------
@@ -82,28 +95,29 @@ export function buildTree(
   options: BuildTreeOptions = {},
 ): RouteTree {
   const root = createNode('', [{ type: 'static', value: '' }], null)
+  const fileIndex = new Map<string, RouteNode>()
 
   if (input.length === 0)
-    return { root }
+    return { root, '~dirty': true, '~fileIndex': fileIndex }
 
   if (isParsedPaths(input)) {
     for (const p of input)
-      insertParsedPath(root, p, 0, options)
+      insertParsedPath(root, p, 0, options, fileIndex)
   }
   else if (isInputFiles(input)) {
     const paths = input.map(f => f.path)
     const priorities = input.map(f => f.priority ?? 0)
     const parsed = parsePath(paths, options)
     for (let i = 0; i < parsed.length; i++)
-      insertParsedPath(root, parsed[i], priorities[i], options)
+      insertParsedPath(root, parsed[i], priorities[i], options, fileIndex)
   }
   else {
     const parsed = parsePath(input as string[], options)
     for (const p of parsed)
-      insertParsedPath(root, p, 0, options)
+      insertParsedPath(root, p, 0, options, fileIndex)
   }
 
-  return { root }
+  return { root, '~dirty': true, '~fileIndex': fileIndex }
 }
 
 function isParsedPaths(input: unknown[]): input is ParsedPath[] {
@@ -116,7 +130,7 @@ function isInputFiles(input: unknown[]): input is InputFile[] {
   return !!first && typeof first === 'object' && 'path' in first && !('segments' in first)
 }
 
-function insertParsedPath(root: RouteNode, parsedPath: ParsedPath, priority: number, options: BuildTreeOptions): void {
+function insertParsedPath(root: RouteNode, parsedPath: ParsedPath, priority: number, options: BuildTreeOptions, fileIndex?: Map<string, RouteNode>): void {
   let current = root
   const groups: string[] = []
 
@@ -138,21 +152,22 @@ function insertParsedPath(root: RouteNode, parsedPath: ParsedPath, priority: num
   const dedupeKey = `${viewName}\0${groupKey}\0${modesKey}`
 
   const fileEntry: RouteNodeFile = {
-    path: parsedPath.file,
-    relativePath: reconstructRelativePath(parsedPath),
+    'path': parsedPath.file,
+    'relativePath': reconstructRelativePath(parsedPath),
     viewName,
     modes,
-    groups: [...groups],
-    originalSegments: parsedPath.segments,
+    'groups': [...groups],
+    'originalSegments': parsedPath.segments,
     priority,
-    _dedupeKey: dedupeKey,
+    '~dedupeKey': dedupeKey,
   }
 
   // Two files are duplicates when they share the same view, modes, and groups.
-  const existing = current.files.find(f => f._dedupeKey === dedupeKey)
+  const existing = current.files.find(f => f['~dedupeKey'] === dedupeKey)
 
   if (!existing) {
     current.files.push(fileEntry)
+    fileIndex?.set(parsedPath.file, current)
     return
   }
 
@@ -161,8 +176,11 @@ function insertParsedPath(root: RouteNode, parsedPath: ParsedPath, priority: num
     throw new Error(`Duplicate route file for view "${viewName}": "${existing.path}" and "${parsedPath.file}"`)
 
   const idx = current.files.indexOf(existing)
-  if (strategy === 'last-wins' || priority < existing.priority)
+  if (strategy === 'last-wins' || priority < existing.priority) {
+    fileIndex?.delete(existing.path)
     current.files[idx] = fileEntry
+    fileIndex?.set(parsedPath.file, current)
+  }
 }
 
 // --- Incremental updates -----------------------------------------------------
@@ -172,16 +190,23 @@ function insertParsedPath(root: RouteNode, parsedPath: ParsedPath, priority: num
  *
  * Parses the file path and inserts it into the tree in-place, avoiding a full
  * rebuild. Useful for dev-server HMR when a file is added or renamed.
+ *
+ * The `options` parameter accepts either raw `BuildTreeOptions` or a
+ * pre-compiled `CompiledParsePath` (from `compileParsePath()`) for faster
+ * repeated calls.
  */
 export function addFile(
   tree: RouteTree,
   filePath: string | InputFile,
-  options: BuildTreeOptions = {},
+  options: BuildTreeOptions | CompiledParsePath = {},
 ): void {
   const path = typeof filePath === 'string' ? filePath : filePath.path
   const priority = typeof filePath === 'string' ? 0 : (filePath.priority ?? 0)
-  const [parsed] = parsePath([path], options)
-  insertParsedPath(tree.root, parsed, priority, options)
+  const parseOne = isCompiledParsePath(options) ? options : parsePath
+  const parseOpts = isCompiledParsePath(options) ? undefined : options
+  const [parsed] = parseOne([path], parseOpts as any)
+  insertParsedPath(tree.root, parsed, priority, (isCompiledParsePath(options) ? {} : options) as BuildTreeOptions, tree['~fileIndex'])
+  tree['~dirty'] = true
 }
 
 /**
@@ -191,7 +216,24 @@ export function addFile(
  * found and removed.
  */
 export function removeFile(tree: RouteTree, filePath: string): boolean {
-  return removeFromNode(tree.root, filePath)
+  // Fast path: use file index if available
+  const node = tree['~fileIndex']?.get(filePath)
+  if (node) {
+    const idx = node.files.findIndex(f => f.path === filePath)
+    if (idx !== -1) {
+      node.files.splice(idx, 1)
+      tree['~fileIndex'].delete(filePath)
+      pruneEmptyAncestors(node)
+      tree['~dirty'] = true
+      return true
+    }
+  }
+
+  // Fallback: DFS search (for trees built without index)
+  const removed = removeFromNode(tree.root, filePath)
+  if (removed)
+    tree['~dirty'] = true
+  return removed
 }
 
 function removeFromNode(node: RouteNode, filePath: string): boolean {
@@ -245,6 +287,10 @@ export function isPageNode(node: RouteNode): boolean {
 }
 
 // --- Internal helpers --------------------------------------------------------
+
+function isCompiledParsePath(options: any): options is CompiledParsePath {
+  return typeof options === 'function' && options['~compiled'] === true
+}
 
 function tokenToString(token: { type: string, value: string }): string {
   switch (token.type) {
