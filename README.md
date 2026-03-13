@@ -448,7 +448,7 @@ The tree distinguishes between **page nodes** (have files) and **structural node
 - **Page nodes** create nesting boundaries – children get relative paths
 - **Structural nodes** collapse – their path segment is prepended to descendants
 
-```
+```text
 parent.vue + parent/child.vue
   → { path: '/parent', children: [{ path: 'child' }] }
 
@@ -458,7 +458,7 @@ parent/child.vue  (no parent.vue)
 
 `index.vue` promotes a structural directory into a page node:
 
-```
+```text
 users/index.vue + users/[id].vue
   → { path: '/users', file: 'users/index.vue', children: [{ path: ':id()' }] }
 ```
