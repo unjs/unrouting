@@ -41,8 +41,8 @@ export interface ParsedPath {
 
 // --- parsePath ---------------------------------------------------------------
 
-const VIEW_MATCH_RE = /@([\w-]+)(?:\.|$)/
-const VIEW_STRIP_RE = /@[\w-]+/
+const VIEW_MATCH_RE = /(?<=[\w\]])@([\w-]+)(?:\.|$)/
+const VIEW_STRIP_RE = /(?<=[\w\]])@[\w-]+/
 const DEFAULT_EXT_RE = /\.\w+$/
 
 export function parsePath(filePaths: string[], options: ParsePathOptions = {}): ParsedPath[] {

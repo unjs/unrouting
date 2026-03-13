@@ -682,6 +682,37 @@ describe('named view emission', () => {
       aside: 'users/[id]@aside.vue',
     })
   })
+
+  it('does not treat leading @ in filenames as named views (nuxt#34557)', () => {
+    const files = [
+      'pages/index.vue',
+      'pages/@admin.vue',
+      'pages/@admin/index.vue',
+      'pages/admin.vue',
+      'pages/admin/index.vue',
+    ]
+    const t = buildTree(files, { roots: ['pages/'] })
+    const routes = toVueRouter4(t)
+
+    // @admin should be a nested route at /@admin, not a named view on /
+    const atAdmin = routes.find(r => r.path === '/@admin')
+    expect(atAdmin).toBeDefined()
+    expect(atAdmin!.file).toBe('pages/@admin.vue')
+    expect(atAdmin!.children).toHaveLength(1)
+    expect(atAdmin!.children![0].file).toBe('pages/@admin/index.vue')
+
+    // admin should also be a nested route at /admin
+    const admin = routes.find(r => r.path === '/admin')
+    expect(admin).toBeDefined()
+    expect(admin!.file).toBe('pages/admin.vue')
+    expect(admin!.children).toHaveLength(1)
+    expect(admin!.children![0].file).toBe('pages/admin/index.vue')
+
+    // The index route should NOT have named view components
+    const index = routes.find(r => r.path === '/')
+    expect(index).toBeDefined()
+    expect(index!.components).toBeUndefined()
+  })
 })
 
 describe('layer priority', () => {

@@ -729,6 +729,31 @@ describe('roots', () => {
     ])
   })
 
+  it('should treat leading @ as literal path character, not named view', () => {
+    const result = parsePath(['pages/@admin.vue'], { roots: ['pages/'] })
+    expect(result).toEqual([
+      {
+        file: 'pages/@admin.vue',
+        segments: [[{ type: 'static', value: '@admin' }]],
+        meta: undefined,
+      },
+    ])
+  })
+
+  it('should treat leading @ as literal in nested paths', () => {
+    const result = parsePath(['pages/@admin/index.vue'], { roots: ['pages/'] })
+    expect(result).toEqual([
+      {
+        file: 'pages/@admin/index.vue',
+        segments: [
+          [{ type: 'static', value: '@admin' }],
+          [{ type: 'static', value: '' }],
+        ],
+        meta: undefined,
+      },
+    ])
+  })
+
   it('should handle empty path with named view after root stripping', () => {
     const filePaths = ['src/pages/index@sidebar.vue']
     const result = parsePath(filePaths, { roots: ['src/pages'] })
