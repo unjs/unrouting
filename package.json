@@ -44,7 +44,7 @@
     "simple-git-hooks": "2.13.1",
     "tsdown": "0.21.0",
     "typescript": "6.0.2",
-    "vite": "8.0.2",
+    "vite": "8.0.3",
     "vitest": "4.1.2",
     "vue-router": "5.0.3"
   },
