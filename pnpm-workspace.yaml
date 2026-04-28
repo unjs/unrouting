@@ -3,8 +3,7 @@ shellEmulator: true
 packages:
   - playground
 
+overrides:
+  unrouting: 'link:.'
 ignoredBuiltDependencies:
   - esbuild
-
-overrides:
-  unrouting: "link:."
