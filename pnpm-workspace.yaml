@@ -5,3 +5,6 @@ packages:
 
 ignoredBuiltDependencies:
   - esbuild
+
+overrides:
+  unrouting: "link:."
