@@ -5,5 +5,7 @@ packages:
 
 overrides:
   unrouting: 'link:.'
-ignoredBuiltDependencies:
-  - esbuild
+
+allowBuilds:
+  esbuild: false
+  simple-git-hooks: true
