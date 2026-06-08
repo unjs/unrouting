@@ -52,11 +52,11 @@ importers:
         specifier: 6.0.2
         version: 6.0.2
       vite:
-        specifier: 8.0.15
-        version: 8.0.15(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0)
+        specifier: 8.0.16
+        version: 8.0.16(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0)
       vitest:
         specifier: 4.1.8
-        version: 4.1.8(@types/node@24.11.0)(@vitest/coverage-v8@4.1.8)(vite@8.0.15(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0))
+        version: 4.1.8(@types/node@24.11.0)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0))
       vue-router:
         specifier: 5.0.3
         version: 5.0.3(@vue/compiler-sfc@3.5.28)(vue@3.5.28(typescript@6.0.2))
@@ -2416,8 +2416,8 @@ packages:
     resolution: {integrity: sha512-OljLrQ9SQdOUqTaQxqL5dEfZWrXExyyWsozYlAWFawPVNuD83igl7uJD2RTkNMbniIYgt8l81eCJGIdQF7avLQ==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
 
-  vite@8.0.15:
-    resolution: {integrity: sha512-qpgllRxrLqwsMAGRdLhsEr9bepaOQk1rxH1xT2coBXLaEB/bfkqQj1j7RMxwMfnYrvO1ZnFMiwX+wBVgnsyn0g==}
+  vite@8.0.16:
+    resolution: {integrity: sha512-h9bXPmJichP5fLmVQo3PyaGSDE2n3aPuomeAlVRm0JLmt4rY6zmPKd59HYI4LNW8oTK7tlTsuC7l/m7awx9Jcw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
     peerDependencies:
@@ -3375,7 +3375,7 @@ snapshots:
       obug: 2.1.1
       std-env: 4.0.0
       tinyrainbow: 3.1.0
-      vitest: 4.1.8(@types/node@24.11.0)(@vitest/coverage-v8@4.1.8)(vite@8.0.15(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0))
+      vitest: 4.1.8(@types/node@24.11.0)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0))
 
   '@vitest/eslint-plugin@1.6.18(@typescript-eslint/eslint-plugin@8.59.4(@typescript-eslint/parser@8.59.4(eslint@10.4.1(jiti@2.6.1))(typescript@6.0.2))(eslint@10.4.1(jiti@2.6.1))(typescript@6.0.2))(eslint@10.4.1(jiti@2.6.1))(typescript@6.0.2)(vitest@4.1.8)':
     dependencies:
@@ -3385,7 +3385,7 @@ snapshots:
     optionalDependencies:
       '@typescript-eslint/eslint-plugin': 8.59.4(@typescript-eslint/parser@8.59.4(eslint@10.4.1(jiti@2.6.1))(typescript@6.0.2))(eslint@10.4.1(jiti@2.6.1))(typescript@6.0.2)
       typescript: 6.0.2
-      vitest: 4.1.8(@types/node@24.11.0)(@vitest/coverage-v8@4.1.8)(vite@8.0.15(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0))
+      vitest: 4.1.8(@types/node@24.11.0)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0))
     transitivePeerDependencies:
       - supports-color
 
@@ -3398,13 +3398,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.8(vite@8.0.15(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0))':
+  '@vitest/mocker@4.1.8(vite@8.0.16(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0))':
     dependencies:
       '@vitest/spy': 4.1.8
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.0.15(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0)
+      vite: 8.0.16(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0)
 
   '@vitest/pretty-format@4.1.8':
     dependencies:
@@ -5102,7 +5102,7 @@ snapshots:
 
   validate-npm-package-name@5.0.1: {}
 
-  vite@8.0.15(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0):
+  vite@8.0.16(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0):
     dependencies:
       lightningcss: 1.32.0
       picomatch: 4.0.4
@@ -5115,10 +5115,10 @@ snapshots:
       jiti: 2.6.1
       yaml: 2.9.0
 
-  vitest@4.1.8(@types/node@24.11.0)(@vitest/coverage-v8@4.1.8)(vite@8.0.15(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0)):
+  vitest@4.1.8(@types/node@24.11.0)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0)):
     dependencies:
       '@vitest/expect': 4.1.8
-      '@vitest/mocker': 4.1.8(vite@8.0.15(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0))
+      '@vitest/mocker': 4.1.8(vite@8.0.16(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0))
       '@vitest/pretty-format': 4.1.8
       '@vitest/runner': 4.1.8
       '@vitest/snapshot': 4.1.8
@@ -5135,7 +5135,7 @@ snapshots:
       tinyexec: 1.1.2
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
-      vite: 8.0.15(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0)
+      vite: 8.0.16(@types/node@24.11.0)(jiti@2.6.1)(yaml@2.9.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 24.11.0
