@@ -286,27 +286,44 @@ export function toVueRouter4<const Attrs extends Record<string, string[]> = neve
 export function toRou3(tree: RouteTree): Rou3Route[] {
   return flattenTree(tree).map((info) => {
     let path = '/'
-    for (const segment of info.segments) {
+    for (let segmentIndex = 0; segmentIndex < info.segments.length; segmentIndex++) {
+      const segment = info.segments[segmentIndex]
       let part = ''
       for (const token of segment) {
         switch (token.type) {
           case 'group':
             break
           case 'static': {
-            part += token.value
+            part += toRou3StaticSegment(token.value)
             break
           }
           case 'dynamic': {
-            part += token.value ? `:${token.value}` : '*'
+            part += token.value ? `:${sanitizeRou3Param(token.value)}` : '*'
+            break
+          }
+          case 'optional': {
+            part += token.value
+              ? isOwnRou3PathSegment(segment)
+                ? `:${sanitizeRou3Param(token.value)}?`
+                : `:${sanitizeRou3Param(token.value)}(.*)`
+              : '*'
             break
           }
           case 'catchall': {
-            part += token.value ? `**:${token.value}` : '**'
+            assertTerminalRou3Repeatable(info.segments, segmentIndex, segment, 'catchall')
+            part += token.value ? `:${sanitizeRou3Param(token.value)}*` : '**'
             break
           }
-          case 'optional': throw new TypeError('[unrouting] `toRou3` does not support optional parameters')
-          case 'repeatable': throw new TypeError('[unrouting] `toRou3` does not support repeatable parameters')
-          case 'optional-repeatable': throw new TypeError('[unrouting] `toRou3` does not support optional repeatable parameters')
+          case 'repeatable': {
+            assertTerminalRou3Repeatable(info.segments, segmentIndex, segment, 'repeatable')
+            part += token.value ? `:${sanitizeRou3Param(token.value)}+` : '*'
+            break
+          }
+          case 'optional-repeatable': {
+            assertTerminalRou3Repeatable(info.segments, segmentIndex, segment, 'optional repeatable')
+            part += token.value ? `:${sanitizeRou3Param(token.value)}*` : '**'
+            break
+          }
         }
       }
       if (part)
@@ -314,6 +331,40 @@ export function toRou3(tree: RouteTree): Rou3Route[] {
     }
     return { path, file: info.file }
   })
+}
+
+function sanitizeRou3Param(value: string): string {
+  return value.replace(/\./g, '') || '_'
+}
+
+const ROU3_STATIC_SEGMENT_ESCAPE_RE = /[:(){}\\]/g
+
+function toRou3StaticSegment(segment: string): string {
+  if (segment.includes('*')) {
+    if (segment === '*')
+      return '\\*'
+    if (segment === '**')
+      return '\\*\\*'
+    throw new TypeError(`[unrouting] \`toRou3\` cannot represent static segment "${segment}" because rou3 treats \`*\` as a wildcard`)
+  }
+
+  return segment.replace(ROU3_STATIC_SEGMENT_ESCAPE_RE, char => `\\${char}`)
+}
+
+function assertTerminalRou3Repeatable(segments: ParsedPathSegment[], segmentIndex: number, segment: ParsedPathSegment, type: string): void {
+  if (!isOwnRou3PathSegment(segment))
+    throw new TypeError(`[unrouting] \`toRou3\` only supports ${type} parameters as their own segment`)
+
+  if (segments.slice(segmentIndex + 1).some(hasRou3PathSegment))
+    throw new TypeError(`[unrouting] \`toRou3\` only supports ${type} parameters at the end of a route`)
+}
+
+function isOwnRou3PathSegment(segment: ParsedPathSegment): boolean {
+  return segment.filter(token => token.type !== 'group').length === 1
+}
+
+function hasRou3PathSegment(segment: ParsedPathSegment): boolean {
+  return segment.some(token => token.type !== 'group' && (token.type !== 'static' || token.value))
 }
 
 // --- RegExp ------------------------------------------------------------------
