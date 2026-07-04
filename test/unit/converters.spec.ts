@@ -77,6 +77,15 @@ describe('rou3 support', () => {
     expect(findRoute(router, 'GET', '/file/here/we/go')?.params).toEqual({ slug: 'file/here/we/go' })
   })
 
+  it('supports catchall parameters', () => {
+    const router = createRouter<{ value: string }>()
+    const pattern = toRou3(tree(['[...slug].vue']))[0].path
+    addRoute(router, 'GET', pattern, { value: pattern })
+
+    expect(pattern).toBe('/**:slug')
+    expect(findRoute(router, 'GET', '/file/here/we/go')?.params).toEqual({ slug: 'file/here/we/go' })
+  })
+
   it('supports optional-repeatable parameters', () => {
     const router = createRouter<{ value: string }>()
     const pattern = toRou3(tree(['[[slug]]+.vue']))[0].path

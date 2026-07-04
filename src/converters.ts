@@ -311,7 +311,7 @@ export function toRou3(tree: RouteTree): Rou3Route[] {
           }
           case 'catchall': {
             assertTerminalRou3Repeatable(info.segments, segmentIndex, segment, 'catchall')
-            part += token.value ? `:${sanitizeRou3Param(token.value)}*` : '**'
+            part += token.value ? `**:${sanitizeRou3Param(token.value)}` : '**'
             break
           }
           case 'repeatable': {
