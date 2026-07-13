@@ -2,7 +2,7 @@
   "name": "unrouting",
   "type": "module",
   "version": "0.1.7",
-  "packageManager": "pnpm@11.1.2",
+  "packageManager": "pnpm@11.12.0",
   "description": "",
   "license": "MIT",
   "repository": "unjs/unrouting",
@@ -33,20 +33,20 @@
     "ufo": "^1.6.3"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "9.0.0",
-    "@types/node": "24.11.0",
+    "@antfu/eslint-config": "9.1.0",
+    "@types/node": "24.13.3",
     "@vitest/coverage-v8": "4.1.10",
-    "bumpp": "11.0.1",
+    "bumpp": "11.1.0",
     "eslint": "10.7.0",
-    "lint-staged": "17.0.5",
-    "pkg-pr-new": "0.0.65",
-    "rou3": "0.9.0",
+    "lint-staged": "17.0.8",
+    "pkg-pr-new": "0.0.75",
+    "rou3": "0.9.1",
     "simple-git-hooks": "2.13.1",
-    "tsdown": "0.21.0",
-    "typescript": "6.0.2",
+    "tsdown": "0.22.7",
+    "typescript": "6.0.3",
     "vite": "8.1.4",
     "vitest": "4.1.10",
-    "vue-router": "5.0.3"
+    "vue-router": "5.1.0"
   },
   "simple-git-hooks": {
     "pre-commit": "npx lint-staged"
