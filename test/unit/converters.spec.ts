@@ -528,12 +528,8 @@ describe('vue-router support', () => {
         "optional/[[opt]]-postfix.vue": {
           "opt": "some",
         },
-        "optional/[[opt]].vue": {
-          "opt": "",
-        },
-        "optional/prefix-[[opt]]-postfix.vue": {
-          "opt": "",
-        },
+        "optional/[[opt]].vue": {},
+        "optional/prefix-[[opt]]-postfix.vue": {},
         "optional/prefix-[[opt]].vue": {
           "opt": "test",
         },
