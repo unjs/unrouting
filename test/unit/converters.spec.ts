@@ -35,7 +35,7 @@ describe('rou3 support', () => {
           "a1_1a": "file",
         },
         "[b2.2b].vue": {
-          "b2.2b": "file",
+          "b22b": "file",
         },
         "[slug].vue": {
           "slug": "file",
@@ -48,16 +48,146 @@ describe('rou3 support', () => {
     `)
   })
 
-  it('should throw error for optional parameters', () => {
-    expect(() => toRou3(tree(['[[optional]].vue']))).toThrow('[unrouting] `toRou3` does not support optional parameters')
+  it('supports optional parameters', () => {
+    const router = createRouter<{ value: string }>()
+    const pattern = toRou3(tree(['users/[[id]].vue']))[0].path
+    addRoute(router, 'GET', pattern, { value: pattern })
+
+    expect(pattern).toBe('/users/:id?')
+    expect(findRoute(router, 'GET', '/users')?.data.value).toBe('/users/:id?')
+    expect(findRoute(router, 'GET', '/users/123')?.params).toEqual({ id: '123' })
   })
 
-  it('should throw error for repeatable parameters', () => {
-    expect(() => toRou3(tree(['[slug]+.vue']))).toThrow('[unrouting] `toRou3` does not support repeatable parameters')
+  it('supports named parameters inside a single segment', () => {
+    const router = createRouter<{ value: string }>()
+    const pattern = toRou3(tree(['articles/article-[slug].vue']))[0].path
+    addRoute(router, 'GET', pattern, { value: pattern })
+
+    expect(pattern).toBe('/articles/article-:slug')
+    expect(findRoute(router, 'GET', '/articles/article-test')?.params).toEqual({ slug: 'test' })
+    expect(findRoute(router, 'GET', '/articles/article-test/extra')).toBeUndefined()
   })
 
-  it('should throw error for optional-repeatable parameters', () => {
-    expect(() => toRou3(tree(['[[slug]]+.vue']))).toThrow('[unrouting] `toRou3` does not support optional repeatable parameters')
+  it('supports mixed optional parameters', () => {
+    const router = createRouter<{ value: string }>()
+    const pattern = toRou3(tree(['optional/prefix-[[opt]].vue']))[0].path
+    addRoute(router, 'GET', pattern, { value: pattern })
+
+    expect(pattern).toBe('/optional/prefix-:opt(.*)')
+    expect(findRoute(router, 'GET', '/optional/prefix-')?.params).toEqual({ opt: '' })
+    expect(findRoute(router, 'GET', '/optional/prefix-test')?.params).toEqual({ opt: 'test' })
+    expect(findRoute(router, 'GET', '/optional/prefix-test/extra')).toBeUndefined()
+  })
+
+  it('supports repeatable parameters', () => {
+    const router = createRouter<{ value: string }>()
+    const pattern = toRou3(tree(['[slug]+.vue']))[0].path
+    addRoute(router, 'GET', pattern, { value: pattern })
+
+    expect(pattern).toBe('/:slug+')
+    expect(findRoute(router, 'GET', '/file/here/we/go')?.params).toEqual({ slug: 'file/here/we/go' })
+    expect(findRoute(router, 'GET', '/')).toBeUndefined()
+  })
+
+  it('supports catchall parameters', () => {
+    const router = createRouter<{ value: string }>()
+    const pattern = toRou3(tree(['[...slug].vue']))[0].path
+    addRoute(router, 'GET', pattern, { value: pattern })
+
+    expect(pattern).toBe('/:slug*')
+    expect(findRoute(router, 'GET', '/')?.data.value).toBe('/:slug*')
+    expect(findRoute(router, 'GET', '/file/here/we/go')?.params).toEqual({ slug: 'file/here/we/go' })
+  })
+
+  it('supports nested catchall parameters with an empty tail', () => {
+    const router = createRouter<{ value: string }>()
+    const pattern = toRou3(tree(['files/[...slug].vue']))[0].path
+    addRoute(router, 'GET', pattern, { value: pattern })
+
+    expect(pattern).toBe('/files/:slug*')
+    expect(findRoute(router, 'GET', '/files')?.data.value).toBe('/files/:slug*')
+    expect(findRoute(router, 'GET', '/files/a/b')?.params).toEqual({ slug: 'a/b' })
+  })
+
+  it('supports optional-repeatable parameters', () => {
+    const router = createRouter<{ value: string }>()
+    const pattern = toRou3(tree(['[[slug]]+.vue']))[0].path
+    addRoute(router, 'GET', pattern, { value: pattern })
+
+    expect(pattern).toBe('/:slug*')
+    expect(findRoute(router, 'GET', '/')?.data.value).toBe('/:slug*')
+    expect(findRoute(router, 'GET', '/file/here/we/go')?.params).toEqual({ slug: 'file/here/we/go' })
+  })
+
+  it('sanitizes dotted rou3 param names', () => {
+    expect(toRou3(tree(['[.].vue']))[0].path).toBe('/:_')
+  })
+
+  it('sanitizes leading digit rou3 param names', () => {
+    const router = createRouter<{ value: string }>()
+    const pattern = toRou3(tree(['prefix-[123].vue']))[0].path
+    addRoute(router, 'GET', pattern, { value: pattern })
+
+    expect(pattern).toBe('/prefix-:_123')
+    expect(findRoute(router, 'GET', '/prefix-test')?.params).toEqual({ _123: 'test' })
+  })
+
+  it('escapes rou3 special characters in static segments', () => {
+    const cases = {
+      'test:name.vue': ['/test\\:name', '/test:name'],
+      '{file}.vue': ['/\\{file\\}', '/{file}'],
+      '*.vue': ['/\\*', '/*'],
+      '**.vue': ['/\\*\\*', '/**'],
+    }
+
+    for (const [file, [pattern, example]] of Object.entries(cases)) {
+      const router = createRouter<{ value: string }>()
+      expect(toRou3(tree([file]))[0].path).toBe(pattern)
+      addRoute(router, 'GET', pattern, { value: file })
+      expect(findRoute(router, 'GET', example)?.data.value).toBe(file)
+    }
+
+    const t = buildTree([{
+      file: 'static.vue',
+      segments: [[{ type: 'static', value: 'test(name)' }]],
+    }] as any)
+    const pattern = toRou3(t)[0].path
+    const router = createRouter<{ value: string }>()
+    expect(pattern).toBe('/test\\(name\\)')
+    addRoute(router, 'GET', pattern, { value: 'static.vue' })
+    expect(findRoute(router, 'GET', '/test(name)')?.data.value).toBe('static.vue')
+  })
+
+  it('escapes static punctuation in mixed rou3 pattern segments', () => {
+    const cases = {
+      'file:[slug].vue': ['/file:x', { slug: 'x' }],
+      'file+[slug].vue': ['/file+x', { slug: 'x' }],
+      'pre*[slug].vue': ['/pre*x', { slug: 'x' }],
+      'café-[slug].vue': ['/café-x', { slug: 'x' }],
+    }
+
+    for (const [file, [example, params]] of Object.entries(cases)) {
+      const router = createRouter<{ value: string }>()
+      const pattern = toRou3(tree([file]))[0].path
+      addRoute(router, 'GET', pattern, { value: pattern })
+
+      expect(findRoute(router, 'GET', example as string)?.params).toEqual(params)
+    }
+
+    const router = createRouter<{ value: string }>()
+    const pattern = toRou3(tree(['file+[slug].vue']))[0].path
+    addRoute(router, 'GET', pattern, { value: pattern })
+    expect(findRoute(router, 'GET', '/fileeeeeex')).toBeUndefined()
+  })
+
+  it('throws for rou3 patterns that would over-match', () => {
+    expect(() => toRou3(tree(['foo*bar.vue']))).toThrow('cannot represent static segment "foo*bar"')
+    expect(() => toRou3(tree(['prefix-[slug]+.vue']))).toThrow('only supports repeatable parameters as their own segment')
+    expect(() => toRou3(tree(['[slug]+/suffix.vue']))).toThrow('only supports repeatable parameters at the end of a route')
+    expect(() => toRou3(tree(['prefix-[...slug].vue']))).toThrow('only supports catchall parameters as their own segment')
+    expect(() => toRou3(tree(['[...slug]/suffix.vue']))).toThrow('only supports catchall parameters at the end of a route')
+    expect(() => toRou3(tree(['prefix-[[slug]]+.vue']))).toThrow('only supports optional repeatable parameters as their own segment')
+    expect(() => toRou3(tree(['[[slug]]+/suffix.vue']))).toThrow('only supports optional repeatable parameters at the end of a route')
   })
 
   it('should handle group-only segments', () => {
@@ -76,10 +206,58 @@ describe('rou3 support', () => {
     expect(toRou3(t)[0].path).toEqual('/*')
   })
 
+  it('should use wildcard for unnamed dynamic tokens inside a single segment', () => {
+    const t = buildTree([{
+      file: 'unnamed.vue',
+      segments: [[
+        { type: 'static', value: 'file-' },
+        { type: 'dynamic', value: '' },
+        { type: 'static', value: '.png' },
+      ]],
+    }] as any)
+    const router = createRouter<{ value: string }>()
+    const pattern = toRou3(t)[0].path
+    addRoute(router, 'GET', pattern, { value: pattern })
+
+    expect(pattern).toEqual('/file-*.png')
+    expect(findRoute(router, 'GET', '/file-icon.png')?.params).toEqual({ 0: 'icon' })
+    expect(findRoute(router, 'GET', '/file-icon/svg.png')).toBeUndefined()
+  })
+
+  it('should use wildcard for optional tokens without a name', () => {
+    const t = buildTree([{
+      file: 'unnamed.vue',
+      segments: [[{ type: 'optional', value: '' }]],
+    }] as any)
+    expect(toRou3(t)[0].path).toEqual('/*')
+  })
+
+  it('should use wildcard for repeatable tokens without a name', () => {
+    const t = buildTree([{
+      file: 'unnamed.vue',
+      segments: [[{ type: 'repeatable', value: '' }]],
+    }] as any)
+    const router = createRouter<{ value: string }>()
+    const pattern = toRou3(t)[0].path
+    addRoute(router, 'GET', pattern, { value: pattern })
+
+    expect(pattern).toEqual('/**:_')
+    expect(findRoute(router, 'GET', '/')?.data.value).toBeUndefined()
+    expect(findRoute(router, 'GET', '/file/here/we/go')?.params).toEqual({ _: 'file/here/we/go' })
+  })
+
   it('should use double wildcard for catchall tokens without a name', () => {
     const t = buildTree([{
       file: 'unnamed.vue',
       segments: [[{ type: 'catchall', value: '' }]],
+    }] as any)
+    expect(toRou3(t)[0].path).toEqual('/**')
+  })
+
+  it('should use double wildcard for optional-repeatable tokens without a name', () => {
+    const t = buildTree([{
+      file: 'unnamed.vue',
+      segments: [[{ type: 'optional-repeatable', value: '' }]],
     }] as any)
     expect(toRou3(t)[0].path).toEqual('/**')
   })

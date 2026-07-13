@@ -40,8 +40,8 @@ importers:
         specifier: 0.0.65
         version: 0.0.65
       rou3:
-        specifier: 0.7.12
-        version: 0.7.12
+        specifier: 0.9.0
+        version: 0.9.0
       simple-git-hooks:
         specifier: 2.13.1
         version: 2.13.1
@@ -2140,8 +2140,8 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
 
-  rou3@0.7.12:
-    resolution: {integrity: sha512-iFE4hLDuloSWcD7mjdCDhx2bKcIsYbtOTpfH5MHHLSKMOUyjqQXTeZVa289uuwEGEKFoE/BAPbhaU4B774nceg==}
+  rou3@0.9.0:
+    resolution: {integrity: sha512-kccB4DcJaSBDjH+ihIjTk9x6FYC8tlrdjL3up/aPZ0msR04zcncfuytynAcvjqFytRHgM3la5O6VtYmTsC/lug==}
 
   scslre@0.3.0:
     resolution: {integrity: sha512-3A6sD0WYP7+QrjbfNA2FN3FsOaGGFoekCVgTyypy53gPxhbkCIjtO6YWgdrfM+n/8sI8JeXZOIxsHjMTNxQ4nQ==}
@@ -4829,7 +4829,7 @@ snapshots:
       '@rolldown/binding-win32-arm64-msvc': 1.1.3
       '@rolldown/binding-win32-x64-msvc': 1.1.3
 
-  rou3@0.7.12: {}
+  rou3@0.9.0: {}
 
   scslre@0.3.0:
     dependencies:
