@@ -9,3 +9,7 @@ overrides:
 allowBuilds:
   esbuild: false
   simple-git-hooks: true
+
+minimumReleaseAgeExclude:
+  - rolldown-plugin-dts@0.27.8
+  - tsdown@0.22.7
