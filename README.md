@@ -289,6 +289,66 @@ interface Rou3Route {
 }
 ```
 
+### `vueRouterToRou3(path, options?)`
+
+Convert a compiled Vue Router path string (e.g. a route definition's `path`) into one or more rou3 patterns. Useful when you already have resolved Vue Router routes (not files) and need to feed them to rou3/Nitro, for example when a module rewrites paths at runtime.
+
+```ts
+function vueRouterToRou3(path: string, options?: VueRouterToRou3Options): VueRouterToRou3Result
+
+interface VueRouterToRou3Options {
+  /** Expand finite alternation params (`:locale(de|fr)`) into concrete paths. @default true */
+  expand?: boolean
+  /** Max paths a single input may expand to before falling back to a dynamic param. Must be a positive integer or a TypeError is thrown. @default 100 */
+  maxExpansions?: number
+  /** Collapse each result into a catch-all glob from its first dynamic segment. @default false */
+  collapse?: boolean
+}
+
+interface VueRouterToRou3Result {
+  /** The converted rou3 patterns. */
+  patterns: string[]
+  /** One entry per lossy or widening conversion step; empty when the conversion is faithful. */
+  issues: VueRouterToRou3Issue[]
+}
+```
+
+Params carrying a finite alternation regexp are expanded into concrete paths; other custom regexps are preserved as rou3 param constraints where rou3 enforces them (plain and optional params). They are dropped on repeatable params (rou3 ignores them there) and when the regexp contains `/` (rou3 splits patterns on slashes and cannot represent it).
+
+```ts
+import { vueRouterToRou3 } from 'unrouting'
+
+vueRouterToRou3('/:locale(de|fr)/account/verify').patterns
+// => ['/de/account/verify', '/fr/account/verify']
+
+vueRouterToRou3('/users/:id(\\d+)').patterns
+// => ['/users/:id(\\d+)']
+
+vueRouterToRou3('/:pathMatch(.*)*').patterns
+// => ['/:pathMatch*']
+```
+
+With `collapse: true`, each path becomes a catch-all glob starting at its first dynamic segment. This exists because some targets (route-rule keys, hosting provider config exports) only understand static prefixes and `**` globs, not `:param` matchers. Enumerable params are still expanded first, so the glob stays as narrow as possible. Note that a path with multiple dynamic params (`/foo/:a/:b`) still collapses to `/foo/**` (with a `collapsed` issue) rather than producing no result.
+
+```ts
+vueRouterToRou3('/products/:id/edit', { collapse: true }).patterns
+// => ['/products/**']
+
+vueRouterToRou3('/:locale(de|fr)/account/:id', { collapse: true }).patterns
+// => ['/de/account/**', '/fr/account/**']
+
+vueRouterToRou3('/static/path', { collapse: true }).patterns
+// => ['/static/path']
+```
+
+Conversions are best-effort: a collapsed catch-all matches more than the original path, repeatable params lose their regexp constraint (rou3 does not enforce them) and huge alternations fall back to plain dynamic params. Every such step is recorded in `issues` so callers can surface them to their users:
+
+```ts
+const { patterns, issues } = vueRouterToRou3('/products/:id', { collapse: true })
+// patterns => ['/products/**']
+// issues => [{ type: 'collapsed', message: 'Collapsed "/products/:id" at segment ":id" into a `**` catch-all, ...' }]
+```
+
 ### `toRegExp(tree)`
 
 Emit RegExp matchers from a tree.
