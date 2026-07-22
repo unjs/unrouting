@@ -412,11 +412,18 @@ export interface VueRouterToRou3Options {
   maxExpansions?: number
 
   /**
-   * Collapse each resulting path into a catch-all glob starting at its first
-   * dynamic segment, e.g. `/products/:id/edit` becomes `['/products/**']`.
-   * Enumerable params are still expanded first (subject to `expand`), so
-   * `/:locale(en|nl)/account` becomes `['/en/**', '/nl/**']`. Useful for
-   * deriving route-rule keys or region prefixes rather than faithful matchers.
+   * Collapse each resulting path into a glob using only `*` and `**`
+   * wildcards. A bare whole-segment param (`:id`) becomes a single-segment
+   * `*` wildcard, which rou3 matches exactly, so `/products/:id` becomes
+   * `['/products/*']` and later segments stay intact. A bare optional param
+   * (`:id?`) becomes a trailing `*` (optional in rou3) or, mid-path, expands
+   * into both variants (with and without the segment). Anything rou3's
+   * wildcards cannot represent exactly (a regexp constraint, a partial
+   * segment like `prefix-:id`, a repeatable param) collapses into a `**` catch-all from that segment onwards, e.g.
+   * `/users/:id(\d+)/edit` becomes `['/users/**']`. Enumerable params are
+   * still expanded first (subject to `expand`), so `/:locale(en|nl)/account`
+   * becomes `['/en/account', '/nl/account']`. Useful for deriving route-rule
+   * keys or region prefixes rather than faithful matchers.
    *
    * @default false
    */
@@ -502,8 +509,10 @@ export function vueRouterToRou3(path: string, options: VueRouterToRou3Options = 
   const trailingSlash = path.length > 1 && path.endsWith('/')
   const rawSegments = splitVueRouterSegments(path)
 
+  const lastSegmentIndex = rawSegments.length - 1 - (trailingSlash ? 1 : 0)
+
   let variants: string[] = ['']
-  for (const rawSegment of rawSegments) {
+  for (const [segmentIndex, rawSegment] of rawSegments.entries()) {
     if (rawSegment === '')
       continue
 
@@ -513,7 +522,22 @@ export function vueRouterToRou3(path: string, options: VueRouterToRou3Options = 
     const overflows = variants.length * alternatives.length > maxExpansions
 
     if (collapse && (overflows || alternatives.some(alternative => !isStaticRou3Segment(alternative)))) {
-      const params = parseVueRouterSegment(rawSegment).filter(token => token.type === 'param')
+      const tokens = parseVueRouterSegment(rawSegment)
+      const only = tokens.length === 1 ? tokens[0]! : undefined
+      // A bare whole-segment param maps exactly to rou3's single-segment `*`
+      // wildcard. rou3's `*` is only optional in trailing position, so a `?`
+      // param emits both variants (segment absent and present) instead.
+      if (only?.type === 'param' && !only.regexp && (only.modifier === '' || only.modifier === '?')) {
+        if (only.modifier === '' || segmentIndex === lastSegmentIndex) {
+          variants = variants.map(prefix => `${prefix}/*`)
+          continue
+        }
+        if (variants.length * 2 <= maxExpansions) {
+          variants = variants.flatMap(prefix => [prefix, `${prefix}/*`])
+          continue
+        }
+      }
+      const params = tokens.filter(token => token.type === 'param')
       report({
         type: 'collapsed',
         param: params.length === 1 ? params[0]!.value : undefined,

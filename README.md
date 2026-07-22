@@ -301,7 +301,7 @@ interface VueRouterToRou3Options {
   expand?: boolean
   /** Max paths a single input may expand to before falling back to a dynamic param. Must be a positive integer or a TypeError is thrown. @default 100 */
   maxExpansions?: number
-  /** Collapse each result into a catch-all glob from its first dynamic segment. @default false */
+  /** Collapse each result into a glob using only `*` and `**` wildcards. @default false */
   collapse?: boolean
 }
 
@@ -328,14 +328,17 @@ vueRouterToRou3('/:pathMatch(.*)*').patterns
 // => ['/:pathMatch*']
 ```
 
-With `collapse: true`, each path becomes a catch-all glob starting at its first dynamic segment. This exists because some targets (route-rule keys, hosting provider config exports) only understand static prefixes and `**` globs, not `:param` matchers. Enumerable params are still expanded first, so the glob stays as narrow as possible. Note that a path with multiple dynamic params (`/foo/:a/:b`) still collapses to `/foo/**` (with a `collapsed` issue) rather than producing no result.
+With `collapse: true`, each path becomes a glob built from `*` and `**` wildcards. This exists because some targets (route-rule keys, hosting provider config exports) only understand static prefixes and wildcard globs, not `:param` matchers. A bare whole-segment param (`:id`) maps exactly to a single-segment `*` wildcard, so no issue is reported and later segments stay intact. A bare optional param (`:id?`) becomes a trailing `*` (optional in rou3) or, mid-path, expands into both variants (with and without the segment). Anything a wildcard cannot represent exactly (a regexp constraint, a partial segment like `prefix-:id`, a repeatable param) collapses into a `**` catch-all from that segment onwards, with a `collapsed` issue. Enumerable params are still expanded first, so the glob stays as narrow as possible.
 
 ```ts
 vueRouterToRou3('/products/:id/edit', { collapse: true }).patterns
-// => ['/products/**']
+// => ['/products/*/edit']
+
+vueRouterToRou3('/users/:id(\\d+)/edit', { collapse: true }).patterns
+// => ['/users/**']
 
 vueRouterToRou3('/:locale(de|fr)/account/:id', { collapse: true }).patterns
-// => ['/de/account/**', '/fr/account/**']
+// => ['/de/account/*', '/fr/account/*']
 
 vueRouterToRou3('/static/path', { collapse: true }).patterns
 // => ['/static/path']
@@ -344,9 +347,9 @@ vueRouterToRou3('/static/path', { collapse: true }).patterns
 Conversions are best-effort: a collapsed catch-all matches more than the original path, repeatable params lose their regexp constraint (rou3 does not enforce them) and huge alternations fall back to plain dynamic params. Every such step is recorded in `issues` so callers can surface them to their users:
 
 ```ts
-const { patterns, issues } = vueRouterToRou3('/products/:id', { collapse: true })
+const { patterns, issues } = vueRouterToRou3('/products/:id(\\d+)', { collapse: true })
 // patterns => ['/products/**']
-// issues => [{ type: 'collapsed', message: 'Collapsed "/products/:id" at segment ":id" into a `**` catch-all, ...' }]
+// issues => [{ type: 'collapsed', message: 'Collapsed "/products/:id(\\d+)" at segment ":id(\\d+)" into a `**` catch-all, ...' }]
 ```
 
 ### `toRegExp(tree)`

@@ -336,20 +336,33 @@ describe('vueRouterToRou3', () => {
     expect(patterns('/foo\\')).toEqual(['/foo\\\\'])
   })
 
-  it('collapses to catch-all globs from the first dynamic segment', () => {
-    expect(patterns('/products/:id', { collapse: true })).toEqual(['/products/**'])
-    expect(patterns('/products/:id/edit', { collapse: true })).toEqual(['/products/**'])
-    expect(patterns('/blog/:a/:b', { collapse: true })).toEqual(['/blog/**'])
-    expect(patterns('/article-:slug/edit', { collapse: true })).toEqual(['/**'])
+  it('collapses bare whole-segment params to single-segment wildcards', () => {
+    expect(patterns('/products/:id', { collapse: true })).toEqual(['/products/*'])
+    expect(patterns('/products/:id/edit', { collapse: true })).toEqual(['/products/*/edit'])
+    expect(patterns('/:a/:b', { collapse: true })).toEqual(['/*/*'])
+    expect(patterns('/blog/:a/:b', { collapse: true })).toEqual(['/blog/*/*'])
+    expect(patterns('/foo/:id?', { collapse: true })).toEqual(['/foo/*'])
+    expect(patterns('/foo/:id?/', { collapse: true })).toEqual(['/foo/*/'])
+    expect(patterns('/foo/:id?/bar', { collapse: true })).toEqual(['/foo/bar', '/foo/*/bar'])
+    expect(patterns('/foo/:a?/:b?/bar', { collapse: true })).toEqual(['/foo/bar', '/foo/*/bar', '/foo/*/bar', '/foo/*/*/bar'])
+    expect(patterns('/foo/:id?/bar', { collapse: true, maxExpansions: 1 })).toEqual(['/foo/**'])
     expect(patterns('/static/path', { collapse: true })).toEqual(['/static/path'])
     expect(patterns('/static/path/', { collapse: true })).toEqual(['/static/path/'])
     expect(patterns('/', { collapse: true })).toEqual(['/'])
     expect(patterns('/foo\\:bar', { collapse: true })).toEqual(['/foo\\:bar'])
   })
 
+  it('collapses to catch-all globs from the first lossy segment', () => {
+    expect(patterns('/users/:id(\\d+)', { collapse: true })).toEqual(['/users/**'])
+    expect(patterns('/article-:slug/edit', { collapse: true })).toEqual(['/**'])
+    expect(patterns('/blog/:slug+', { collapse: true })).toEqual(['/blog/**'])
+    expect(patterns('/blog/:slug*', { collapse: true })).toEqual(['/blog/**'])
+    expect(patterns('/:a/:id(\\d+)/edit', { collapse: true })).toEqual(['/*/**'])
+  })
+
   it('expands enumerable params before collapsing', () => {
     expect(patterns('/:locale(de|fr)/account', { collapse: true })).toEqual(['/de/account', '/fr/account'])
-    expect(patterns('/:locale(de|fr)/account/:id', { collapse: true })).toEqual(['/de/account/**', '/fr/account/**'])
+    expect(patterns('/:locale(de|fr)/account/:id', { collapse: true })).toEqual(['/de/account/*', '/fr/account/*'])
     expect(patterns('/:locale(de|fr)/account', { collapse: true, expand: false })).toEqual(['/**'])
     expect(patterns('/:a(a|b|c)/:b', { collapse: true, maxExpansions: 2 })).toEqual(['/**'])
   })
@@ -358,8 +371,12 @@ describe('vueRouterToRou3', () => {
     const issues = (path: string, options?: Parameters<typeof vueRouterToRou3>[1]) =>
       vueRouterToRou3(path, options).issues.map(issue => issue.type)
 
-    expect(issues('/products/:id', { collapse: true })).toEqual(['collapsed'])
-    expect(vueRouterToRou3('/products/:id', { collapse: true }).issues[0]!.param).toBe('id')
+    expect(issues('/products/:id', { collapse: true })).toEqual([])
+    expect(issues('/users/:id(\\d+)', { collapse: true })).toEqual(['collapsed'])
+    expect(issues('/article-:slug/edit', { collapse: true })).toEqual(['collapsed'])
+    expect(issues('/blog/:slug+', { collapse: true })).toEqual(['collapsed'])
+    expect(issues('/blog/:slug*', { collapse: true })).toEqual(['collapsed'])
+    expect(vueRouterToRou3('/users/:id(\\d+)', { collapse: true }).issues[0]!.param).toBe('id')
     expect(vueRouterToRou3('/blog/:a-:b', { collapse: true }).issues[0]!.param).toBeUndefined()
     expect(issues('/repeat/:id(\\d+)+')).toEqual(['dropped-regexp'])
     expect(issues('/:pathMatch(.*)*')).toEqual([])
