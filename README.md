@@ -363,6 +363,28 @@ interface RegExpRoute {
 }
 ```
 
+### `rou3PatternToURLPattern(pattern, options?)`
+
+Convert a single rou3/Nitro route pattern into a URLPattern pathname pattern (e.g. for a [Speculation Rules](https://developer.mozilla.org/en-US/docs/Web/API/Speculation_Rules_API) `href_matches` rule, or `new URLPattern({ pathname })`). rou3 and URLPattern disagree on `*`/`**`, so this is not a no-op. Single-segment tokens (`:name`, `*`) map to `([^/]+)` / `([^/]*)` by default; pass `{ segment: 'loose' }` to map them to `*` (shorter, but matches across `/`).
+
+```ts
+function rou3PatternToURLPattern(pattern: string, options?: { segment?: 'strict' | 'loose' }): {
+  pattern: string
+  issues: Rou3ToURLPatternIssue[]
+}
+
+rou3PatternToURLPattern('/blog/**').pattern // => '/blog/*'
+rou3PatternToURLPattern('/users/:id').pattern // => '/users/([^/]+)'
+```
+
+Conversions are best-effort: single-segment tokens widen to `*` in loose mode, repeatable params (`:path+`) widen to a catch-all, and rou3 syntax with no URLPattern equivalent (regexp constraints, unnamed/non-capturing groups) is dropped for a broader pattern. Every such step is recorded in `issues` so callers can surface them:
+
+```ts
+const { pattern, issues } = rou3PatternToURLPattern('/users/:id(\\d+)')
+// pattern => '/users/([^/]+)'
+// issues => [{ type: 'unsupported', param: 'id', message: 'Dropped regexp constraint on ":id" ...' }]
+```
+
 ### `toVueRouterSegment(tokens, options?)`
 
 Convert a single parsed segment (an array of tokens returned by `parseSegment`) into a Vue Router 4 path segment string. Useful for modules that already have resolved routes and only need segment-level path conversion (e.g., `@nuxtjs/i18n` converting per-locale custom paths).

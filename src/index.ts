@@ -6,3 +6,6 @@ export { compileParsePath, parsePath, parseSegment } from './parse'
 
 export type { BuildTreeOptions, InputFile, RouteNode, RouteNodeFile, RouteTree } from './tree'
 export { addFile, buildTree, isPageNode, removeFile, walkTree } from './tree'
+
+export type { Rou3PatternToURLPatternOptions, Rou3PatternToURLPatternResult, Rou3ToURLPatternIssue } from './url-pattern'
+export { rou3PatternToURLPattern } from './url-pattern'
