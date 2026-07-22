@@ -365,7 +365,7 @@ interface RegExpRoute {
 
 ### `rou3PatternToURLPattern(pattern, options?)`
 
-Convert a single rou3/Nitro route pattern into a URLPattern pathname pattern (e.g. for a [Speculation Rules](https://developer.mozilla.org/en-US/docs/Web/API/Speculation_Rules_API) `href_matches` rule, or `new URLPattern({ pathname })`). rou3 and URLPattern disagree on `*`/`**`, so this is not a no-op. Single-segment tokens (`:name`, `*`) map to `([^/]+)` / `([^/]*)` by default; pass `{ segment: 'loose' }` to map them to `*` (shorter, but matches across `/`).
+Convert a single rou3/Nitro route pattern into a URLPattern pathname pattern (e.g. for a [Speculation Rules](https://developer.mozilla.org/en-US/docs/Web/API/Speculation_Rules_API) `href_matches` rule, or `new URLPattern({ pathname })`). rou3 describes its syntax as URLPattern-compatible, so most tokens (`:name`, `:name(regex)`, `:name?`, `:name+`, `(regex)`, `{...}`) pass through unchanged. Only `*` and `**` genuinely differ and are translated: rou3 `*` (single segment) becomes `([^/]*)`, and rou3 `**`/`**:name` (catch-all) becomes `*`.
 
 ```ts
 function rou3PatternToURLPattern(pattern: string, options?: { segment?: 'strict' | 'loose' }): {
@@ -374,15 +374,16 @@ function rou3PatternToURLPattern(pattern: string, options?: { segment?: 'strict'
 }
 
 rou3PatternToURLPattern('/blog/**').pattern // => '/blog/*'
-rou3PatternToURLPattern('/users/:id').pattern // => '/users/([^/]+)'
+rou3PatternToURLPattern('/users/:id').pattern // => '/users/:id'
+rou3PatternToURLPattern('/users/:id(\\d+)').pattern // => '/users/:id(\\d+)'
 ```
 
-Conversions are best-effort: single-segment tokens widen to `*` in loose mode, repeatable params (`:path+`) widen to a catch-all, and rou3 syntax with no URLPattern equivalent (regexp constraints, unnamed/non-capturing groups) is dropped for a broader pattern. Every such step is recorded in `issues` so callers can surface them:
+Pass `{ segment: 'loose' }` to collapse single-segment tokens (`:name`, `*`) to `*` instead, matching Nuxt's historical inline conversion. This over-matches (a single `*` matches across `/`), so each collapse is recorded in `issues`:
 
 ```ts
-const { pattern, issues } = rou3PatternToURLPattern('/users/:id(\\d+)')
-// pattern => '/users/([^/]+)'
-// issues => [{ type: 'unsupported', param: 'id', message: 'Dropped regexp constraint on ":id" ...' }]
+const { pattern, issues } = rou3PatternToURLPattern('/users/:id', { segment: 'loose' })
+// pattern => '/users/*'
+// issues => [{ type: 'widened', param: 'id', message: 'Widened ":id" ...' }]
 ```
 
 ### `toVueRouterSegment(tokens, options?)`
