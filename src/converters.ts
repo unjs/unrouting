@@ -433,8 +433,9 @@ const ENUMERABLE_ALTERNATION_RE = /^[\w.~-]+(?:\|[\w.~-]+)*$/
  * paths, so `/:locale(de|fr)/account/verify` becomes
  * `['/de/account/verify', '/fr/account/verify']`. Other params degrade to
  * rou3 dynamic (`:id`), repeatable (`:id+`), optional (`:id?`) or catch-all
- * (`:id*` / `**`) segments; the custom regexp is dropped because rou3 cannot
- * represent it.
+ * (`:id*` / `**`) segments. Custom regexps are preserved as rou3 param
+ * constraints where rou3 enforces them (plain and optional params); rou3
+ * ignores constraints on repeatable params, so they are dropped there.
  *
  * @example
  * vueRouterToRou3('/:locale(de|fr)/account/verify')
@@ -442,7 +443,7 @@ const ENUMERABLE_ALTERNATION_RE = /^[\w.~-]+(?:\|[\w.~-]+)*$/
  *
  * @example
  * vueRouterToRou3('/users/:id(\\d+)')
- * // => ['/users/:id']
+ * // => ['/users/:id(\\d+)']
  */
 export function vueRouterToRou3(path: string, options: VueRouterToRou3Options = {}): string[] {
   const expand = options.expand ?? true
@@ -456,7 +457,7 @@ export function vueRouterToRou3(path: string, options: VueRouterToRou3Options = 
     if (rawSegment === '')
       continue
 
-    const alternatives = vueRouterSegmentToRou3(rawSegment, expand)
+    const alternatives = vueRouterSegmentToRou3(rawSegment, expand, maxExpansions)
 
     if (variants.length * alternatives.length > maxExpansions) {
       const collapsed = vueRouterSegmentToRou3(rawSegment, false)[0]
@@ -502,12 +503,14 @@ function splitVueRouterSegments(path: string): string[] {
   return segments
 }
 
-function vueRouterSegmentToRou3(segment: string, expand: boolean): string[] {
+function vueRouterSegmentToRou3(segment: string, expand: boolean, maxExpansions = Number.POSITIVE_INFINITY): string[] {
   const tokens = parseVueRouterSegment(segment)
 
   let parts: string[] = ['']
   for (const token of tokens) {
-    const alternatives = vueRouterTokenToRou3(token, expand)
+    let alternatives = vueRouterTokenToRou3(token, expand)
+    if (parts.length * alternatives.length > maxExpansions)
+      alternatives = vueRouterTokenToRou3(token, false)
     const next: string[] = []
     for (const prefix of parts) {
       for (const alternative of alternatives)
@@ -533,15 +536,18 @@ function vueRouterTokenToRou3(token: VueRouterPathToken, expand: boolean): strin
   }
 
   const name = sanitizeRou3Param(token.value)
+  // rou3 only enforces `(regexp)` constraints on plain and optional params;
+  // repeatable params silently ignore them, so no point emitting them there.
+  const constraint = token.regexp && (token.modifier === '' || token.modifier === '?') ? `(${token.regexp})` : ''
   switch (token.modifier) {
     case '?':
-      return [`:${name}?`]
+      return [`:${name}${constraint}?`]
     case '+':
       return [`:${name}+`]
     case '*':
       return [`:${name}*`]
     default:
-      return [`:${name}`]
+      return [`:${name}${constraint}`]
   }
 }
 
@@ -587,6 +593,11 @@ function parseVueRouterSegment(segment: string): VueRouterPathToken[] {
       let source = ''
       do {
         const inner = segment[i]
+        if (inner === '\\') {
+          source += inner + (segment[i + 1] ?? '')
+          i += 2
+          continue
+        }
         if (inner === '(')
           depth++
         else if (inner === ')')

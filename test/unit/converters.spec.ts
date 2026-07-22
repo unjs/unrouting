@@ -302,15 +302,22 @@ describe('vueRouterToRou3', () => {
     ])
   })
 
-  it('drops non-enumerable custom regexps and keeps the dynamic param', () => {
-    expect(vueRouterToRou3('/users/:id(\\d+)')).toEqual(['/users/:id'])
-    expect(vueRouterToRou3('/articles/article-:slug([^/]+)')).toEqual(['/articles/article-:slug'])
-  })
-
   it('maps param modifiers to rou3 equivalents', () => {
     expect(vueRouterToRou3('/:id?')).toEqual(['/:id?'])
     expect(vueRouterToRou3('/:slug+')).toEqual(['/:slug+'])
     expect(vueRouterToRou3('/:pathMatch(.*)*')).toEqual(['/:pathMatch*'])
+  })
+
+  it('preserves non-enumerable custom regexps as rou3 constraints', () => {
+    expect(vueRouterToRou3('/users/:id(\\d+)')).toEqual(['/users/:id(\\d+)'])
+    expect(vueRouterToRou3('/users/:id(\\d+)?')).toEqual(['/users/:id(\\d+)?'])
+    expect(vueRouterToRou3('/articles/article-:slug([^/]+)')).toEqual(['/articles/article-:slug([^/]+)'])
+    expect(vueRouterToRou3('/repeat/:id(\\d+)+')).toEqual(['/repeat/:id+'])
+  })
+
+  it('handles escaped parentheses inside a custom regexp', () => {
+    expect(vueRouterToRou3('/:custom(a\\(b)/tail')).toEqual(['/:custom(a\\(b)/tail'])
+    expect(vueRouterToRou3('/:x(a\\')).toEqual(['/a'])
   })
 
   it('preserves plain and trailing-slash paths', () => {
@@ -325,15 +332,24 @@ describe('vueRouterToRou3', () => {
 
   it('can disable expansion', () => {
     expect(vueRouterToRou3('/:locale(de|fr)/account', { expand: false })).toEqual([
-      '/:locale/account',
+      '/:locale(de|fr)/account',
     ])
   })
 
-  it('falls back to a dynamic param when expansion would exceed the limit', () => {
+  it('falls back to a constrained param when expansion would exceed the limit', () => {
     expect(vueRouterToRou3('/:a(a|b|c)/:b(d|e|f)', { maxExpansions: 4 })).toEqual([
-      '/a/:b',
-      '/b/:b',
-      '/c/:b',
+      '/a/:b(d|e|f)',
+      '/b/:b(d|e|f)',
+      '/c/:b(d|e|f)',
+    ])
+  })
+
+  it('bounds expansion of multiple params within a single segment', () => {
+    expect(vueRouterToRou3('/:a(a|b)-:b(c|d)-:c(e|f)', { maxExpansions: 4 })).toEqual([
+      '/a-c-:c(e|f)',
+      '/a-d-:c(e|f)',
+      '/b-c-:c(e|f)',
+      '/b-d-:c(e|f)',
     ])
   })
 })

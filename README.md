@@ -304,7 +304,7 @@ interface VueRouterToRou3Options {
 }
 ```
 
-Params carrying a finite alternation regexp are expanded into concrete paths; other custom regexps are dropped because rou3 cannot represent them.
+Params carrying a finite alternation regexp are expanded into concrete paths; other custom regexps are preserved as rou3 param constraints where rou3 enforces them (plain and optional params) and dropped on repeatable params, where rou3 ignores them.
 
 ```ts
 import { vueRouterToRou3 } from 'unrouting'
@@ -313,7 +313,7 @@ vueRouterToRou3('/:locale(de|fr)/account/verify')
 // => ['/de/account/verify', '/fr/account/verify']
 
 vueRouterToRou3('/users/:id(\\d+)')
-// => ['/users/:id']
+// => ['/users/:id(\\d+)']
 
 vueRouterToRou3('/:pathMatch(.*)*')
 // => ['/:pathMatch*']
