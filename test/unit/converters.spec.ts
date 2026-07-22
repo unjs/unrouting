@@ -1,7 +1,7 @@
 import { addRoute, createRouter, findRoute } from 'rou3'
 import { describe, expect, it } from 'vitest'
 import { createMemoryHistory, createRouter as createVueRouter } from 'vue-router'
-import { addFile, buildTree, compileParsePath, isPageNode, parsePath, parseSegment, removeFile, toRegExp, toRou3, toVueRouter4, toVueRouterPath, toVueRouterSegment, walkTree } from '../../src'
+import { addFile, buildTree, compileParsePath, isPageNode, parsePath, parseSegment, removeFile, toRegExp, toRou3, toVueRouter4, toVueRouterPath, toVueRouterSegment, vueRouterToRou3, walkTree } from '../../src'
 
 /** buildTree shorthand — accepts raw strings */
 const tree = (paths: string[]) => buildTree(paths)
@@ -264,6 +264,77 @@ describe('rou3 support', () => {
 
   it('should handle empty segments', () => {
     expect(toRou3(tree(['file//index.vue']))[0].path).toEqual('/file')
+  })
+})
+
+describe('vueRouterToRou3', () => {
+  it('expands enumerable alternation params into concrete paths', () => {
+    expect(vueRouterToRou3('/:locale(de|fr)/account/verify')).toEqual([
+      '/de/account/verify',
+      '/fr/account/verify',
+    ])
+  })
+
+  it('expanded paths resolve against rou3', () => {
+    const router = createRouter<{ value: string }>()
+    for (const path of vueRouterToRou3('/:locale(de|fr)/account/verify'))
+      addRoute(router, 'GET', path, { value: path })
+
+    expect(findRoute(router, 'GET', '/de/account/verify')?.data.value).toBe('/de/account/verify')
+    expect(findRoute(router, 'GET', '/fr/account/verify')?.data.value).toBe('/fr/account/verify')
+    expect(findRoute(router, 'GET', '/es/account/verify')).toBeUndefined()
+  })
+
+  it('handles the cartesian product of multiple enumerable params', () => {
+    expect(vueRouterToRou3('/:locale(de|fr)/blog/:category(tech|life)')).toEqual([
+      '/de/blog/tech',
+      '/de/blog/life',
+      '/fr/blog/tech',
+      '/fr/blog/life',
+    ])
+  })
+
+  it('treats an optional enumerable param as an extra empty branch', () => {
+    expect(vueRouterToRou3('/:locale(de|fr)?/home')).toEqual([
+      '/home',
+      '/de/home',
+      '/fr/home',
+    ])
+  })
+
+  it('drops non-enumerable custom regexps and keeps the dynamic param', () => {
+    expect(vueRouterToRou3('/users/:id(\\d+)')).toEqual(['/users/:id'])
+    expect(vueRouterToRou3('/articles/article-:slug([^/]+)')).toEqual(['/articles/article-:slug'])
+  })
+
+  it('maps param modifiers to rou3 equivalents', () => {
+    expect(vueRouterToRou3('/:id?')).toEqual(['/:id?'])
+    expect(vueRouterToRou3('/:slug+')).toEqual(['/:slug+'])
+    expect(vueRouterToRou3('/:pathMatch(.*)*')).toEqual(['/:pathMatch*'])
+  })
+
+  it('preserves plain and trailing-slash paths', () => {
+    expect(vueRouterToRou3('/')).toEqual(['/'])
+    expect(vueRouterToRou3('/static/path/')).toEqual(['/static/path/'])
+  })
+
+  it('treats an escaped colon as a literal', () => {
+    expect(vueRouterToRou3('/foo\\:bar')).toEqual(['/foo\\:bar'])
+    expect(vueRouterToRou3('/foo\\')).toEqual(['/foo\\\\'])
+  })
+
+  it('can disable expansion', () => {
+    expect(vueRouterToRou3('/:locale(de|fr)/account', { expand: false })).toEqual([
+      '/:locale/account',
+    ])
+  })
+
+  it('falls back to a dynamic param when expansion would exceed the limit', () => {
+    expect(vueRouterToRou3('/:a(a|b|c)/:b(d|e|f)', { maxExpansions: 4 })).toEqual([
+      '/a/:b',
+      '/b/:b',
+      '/c/:b',
+    ])
   })
 })
 

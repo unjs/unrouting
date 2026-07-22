@@ -289,6 +289,36 @@ interface Rou3Route {
 }
 ```
 
+### `vueRouterToRou3(path, options?)`
+
+Convert a compiled Vue Router path string (e.g. a route definition's `path`) into one or more rou3 patterns. Useful when you already have resolved Vue Router routes (not files) and need to feed them to rou3/Nitro, for example when a module rewrites paths at runtime.
+
+```ts
+function vueRouterToRou3(path: string, options?: VueRouterToRou3Options): string[]
+
+interface VueRouterToRou3Options {
+  /** Expand finite alternation params (`:locale(de|fr)`) into concrete paths. @default true */
+  expand?: boolean
+  /** Max paths a single input may expand to before falling back to a dynamic param. @default 100 */
+  maxExpansions?: number
+}
+```
+
+Params carrying a finite alternation regexp are expanded into concrete paths; other custom regexps are dropped because rou3 cannot represent them.
+
+```ts
+import { vueRouterToRou3 } from 'unrouting'
+
+vueRouterToRou3('/:locale(de|fr)/account/verify')
+// => ['/de/account/verify', '/fr/account/verify']
+
+vueRouterToRou3('/users/:id(\\d+)')
+// => ['/users/:id']
+
+vueRouterToRou3('/:pathMatch(.*)*')
+// => ['/:pathMatch*']
+```
+
 ### `toRegExp(tree)`
 
 Emit RegExp matchers from a tree.

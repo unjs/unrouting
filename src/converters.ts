@@ -388,6 +388,228 @@ function hasRou3PathSegment(segment: ParsedPathSegment): boolean {
   return segment.some(token => token.type !== 'group' && (token.type !== 'static' || token.value))
 }
 
+// --- Vue Router path string → rou3 -------------------------------------------
+
+export interface VueRouterToRou3Options {
+  /**
+   * Expand params whose custom regexp is a finite alternation of literal
+   * values (e.g. `:locale(de|fr)`) into one concrete path per branch.
+   *
+   * When `false`, such params are emitted as a single rou3 dynamic param
+   * (`:locale`) instead of being enumerated.
+   *
+   * @default true
+   */
+  expand?: boolean
+
+  /**
+   * Upper bound on the number of paths a single input may expand to. Once the
+   * cartesian product of enumerable branches would exceed this, expansion is
+   * abandoned and the offending params fall back to dynamic rou3 params.
+   *
+   * @default 100
+   */
+  maxExpansions?: number
+}
+
+interface VueRouterPathToken {
+  type: 'static' | 'param'
+  /** Static text, or the param name (without the leading `:`). */
+  value: string
+  /** Raw regexp source between the parentheses, if the param declared one. */
+  regexp?: string
+  modifier: '' | '?' | '+' | '*'
+}
+
+const VUE_ROUTER_PARAM_NAME_RE = /[\w$]/
+/** Alternation of URL-safe literals, e.g. `de|fr|en-GB`. */
+const ENUMERABLE_ALTERNATION_RE = /^[\w.~-]+(?:\|[\w.~-]+)*$/
+
+/**
+ * Convert a compiled Vue Router path string (e.g. from a route definition's
+ * `path`) into one or more rou3 patterns.
+ *
+ * Params carrying a finite alternation regexp are expanded into concrete
+ * paths, so `/:locale(de|fr)/account/verify` becomes
+ * `['/de/account/verify', '/fr/account/verify']`. Other params degrade to
+ * rou3 dynamic (`:id`), repeatable (`:id+`), optional (`:id?`) or catch-all
+ * (`:id*` / `**`) segments; the custom regexp is dropped because rou3 cannot
+ * represent it.
+ *
+ * @example
+ * vueRouterToRou3('/:locale(de|fr)/account/verify')
+ * // => ['/de/account/verify', '/fr/account/verify']
+ *
+ * @example
+ * vueRouterToRou3('/users/:id(\\d+)')
+ * // => ['/users/:id']
+ */
+export function vueRouterToRou3(path: string, options: VueRouterToRou3Options = {}): string[] {
+  const expand = options.expand ?? true
+  const maxExpansions = options.maxExpansions ?? 100
+
+  const trailingSlash = path.length > 1 && path.endsWith('/')
+  const rawSegments = splitVueRouterSegments(path)
+
+  let variants: string[] = ['']
+  for (const rawSegment of rawSegments) {
+    if (rawSegment === '')
+      continue
+
+    const alternatives = vueRouterSegmentToRou3(rawSegment, expand)
+
+    if (variants.length * alternatives.length > maxExpansions) {
+      const collapsed = vueRouterSegmentToRou3(rawSegment, false)[0]
+      variants = variants.map(prefix => `${prefix}/${collapsed}`)
+      continue
+    }
+
+    const next: string[] = []
+    for (const prefix of variants) {
+      for (const alternative of alternatives)
+        next.push(alternative === '' ? prefix : `${prefix}/${alternative}`)
+    }
+    variants = next
+  }
+
+  return variants.map(v => (v === '' ? '/' : v) + (trailingSlash ? '/' : ''))
+}
+
+/** Split on `/` while ignoring slashes inside a param's `(...)` regexp. */
+function splitVueRouterSegments(path: string): string[] {
+  const segments: string[] = []
+  let current = ''
+  let depth = 0
+  for (let i = 0; i < path.length; i++) {
+    const char = path[i]
+    if (char === '\\') {
+      current += char + (path[i + 1] ?? '')
+      i++
+      continue
+    }
+    if (char === '(')
+      depth++
+    else if (char === ')' && depth > 0)
+      depth--
+    if (char === '/' && depth === 0) {
+      segments.push(current)
+      current = ''
+      continue
+    }
+    current += char
+  }
+  segments.push(current)
+  return segments
+}
+
+function vueRouterSegmentToRou3(segment: string, expand: boolean): string[] {
+  const tokens = parseVueRouterSegment(segment)
+
+  let parts: string[] = ['']
+  for (const token of tokens) {
+    const alternatives = vueRouterTokenToRou3(token, expand)
+    const next: string[] = []
+    for (const prefix of parts) {
+      for (const alternative of alternatives)
+        next.push(prefix + alternative)
+    }
+    parts = next
+  }
+  return parts
+}
+
+function vueRouterTokenToRou3(token: VueRouterPathToken, expand: boolean): string[] {
+  if (token.type === 'static')
+    return [toRou3StaticSegment(token.value)]
+
+  if (
+    expand
+    && token.regexp
+    && (token.modifier === '' || token.modifier === '?')
+    && ENUMERABLE_ALTERNATION_RE.test(token.regexp)
+  ) {
+    const branches = token.regexp.split('|')
+    return token.modifier === '?' ? ['', ...branches] : branches
+  }
+
+  const name = sanitizeRou3Param(token.value)
+  switch (token.modifier) {
+    case '?':
+      return [`:${name}?`]
+    case '+':
+      return [`:${name}+`]
+    case '*':
+      return [`:${name}*`]
+    default:
+      return [`:${name}`]
+  }
+}
+
+function parseVueRouterSegment(segment: string): VueRouterPathToken[] {
+  const tokens: VueRouterPathToken[] = []
+  let staticBuffer = ''
+  let i = 0
+
+  const flushStatic = () => {
+    if (staticBuffer) {
+      tokens.push({ type: 'static', value: staticBuffer, modifier: '' })
+      staticBuffer = ''
+    }
+  }
+
+  while (i < segment.length) {
+    const char = segment[i]
+
+    if (char === '\\' && segment[i + 1] === ':') {
+      staticBuffer += ':'
+      i += 2
+      continue
+    }
+
+    if (char !== ':') {
+      staticBuffer += char
+      i++
+      continue
+    }
+
+    flushStatic()
+    i++
+
+    let name = ''
+    while (i < segment.length && VUE_ROUTER_PARAM_NAME_RE.test(segment[i])) {
+      name += segment[i]
+      i++
+    }
+
+    let regexp: string | undefined
+    if (segment[i] === '(') {
+      let depth = 0
+      let source = ''
+      do {
+        const inner = segment[i]
+        if (inner === '(')
+          depth++
+        else if (inner === ')')
+          depth--
+        source += inner
+        i++
+      } while (i < segment.length && depth > 0)
+      regexp = source.slice(1, -1)
+    }
+
+    let modifier: VueRouterPathToken['modifier'] = ''
+    if (segment[i] === '?' || segment[i] === '+' || segment[i] === '*') {
+      modifier = segment[i] as VueRouterPathToken['modifier']
+      i++
+    }
+
+    tokens.push({ type: 'param', value: name, regexp, modifier })
+  }
+
+  flushStatic()
+  return tokens
+}
+
 // --- RegExp ------------------------------------------------------------------
 
 export function toRegExp(tree: RouteTree): RegExpRoute[] {
