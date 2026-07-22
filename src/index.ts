@@ -1,4 +1,4 @@
-export type { InferAttrs, RegExpRoute, Rou3Route, ToVueRouterSegmentOptions, VueRoute, VueRouterEmitOptions, VueRouterToRou3Options } from './converters'
+export type { InferAttrs, RegExpRoute, Rou3Route, ToVueRouterSegmentOptions, VueRoute, VueRouterEmitOptions, VueRouterToRou3Issue, VueRouterToRou3Options, VueRouterToRou3Result } from './converters'
 export { toRegExp, toRou3, toVueRouter4, toVueRouterPath, toVueRouterSegment, vueRouterToRou3 } from './converters'
 
 export type { CompiledParsePath, ParsedPath, ParsedPathSegment, ParsedPathSegmentToken, ParsePathOptions, SegmentType } from './parse'

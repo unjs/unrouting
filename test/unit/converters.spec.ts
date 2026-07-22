@@ -268,8 +268,10 @@ describe('rou3 support', () => {
 })
 
 describe('vueRouterToRou3', () => {
+  const patterns = (path: string, options?: Parameters<typeof vueRouterToRou3>[1]) => vueRouterToRou3(path, options).patterns
+
   it('expands enumerable alternation params into concrete paths', () => {
-    expect(vueRouterToRou3('/:locale(de|fr)/account/verify')).toEqual([
+    expect(patterns('/:locale(de|fr)/account/verify')).toEqual([
       '/de/account/verify',
       '/fr/account/verify',
     ])
@@ -277,7 +279,7 @@ describe('vueRouterToRou3', () => {
 
   it('expanded paths resolve against rou3', () => {
     const router = createRouter<{ value: string }>()
-    for (const path of vueRouterToRou3('/:locale(de|fr)/account/verify'))
+    for (const path of patterns('/:locale(de|fr)/account/verify'))
       addRoute(router, 'GET', path, { value: path })
 
     expect(findRoute(router, 'GET', '/de/account/verify')?.data.value).toBe('/de/account/verify')
@@ -286,7 +288,7 @@ describe('vueRouterToRou3', () => {
   })
 
   it('handles the cartesian product of multiple enumerable params', () => {
-    expect(vueRouterToRou3('/:locale(de|fr)/blog/:category(tech|life)')).toEqual([
+    expect(patterns('/:locale(de|fr)/blog/:category(tech|life)')).toEqual([
       '/de/blog/tech',
       '/de/blog/life',
       '/fr/blog/tech',
@@ -295,7 +297,7 @@ describe('vueRouterToRou3', () => {
   })
 
   it('treats an optional enumerable param as an extra empty branch', () => {
-    expect(vueRouterToRou3('/:locale(de|fr)?/home')).toEqual([
+    expect(patterns('/:locale(de|fr)?/home')).toEqual([
       '/home',
       '/de/home',
       '/fr/home',
@@ -303,41 +305,75 @@ describe('vueRouterToRou3', () => {
   })
 
   it('maps param modifiers to rou3 equivalents', () => {
-    expect(vueRouterToRou3('/:id?')).toEqual(['/:id?'])
-    expect(vueRouterToRou3('/:slug+')).toEqual(['/:slug+'])
-    expect(vueRouterToRou3('/:pathMatch(.*)*')).toEqual(['/:pathMatch*'])
+    expect(patterns('/:id?')).toEqual(['/:id?'])
+    expect(patterns('/:slug+')).toEqual(['/:slug+'])
+    expect(patterns('/:pathMatch(.*)*')).toEqual(['/:pathMatch*'])
   })
 
   it('preserves non-enumerable custom regexps as rou3 constraints', () => {
-    expect(vueRouterToRou3('/users/:id(\\d+)')).toEqual(['/users/:id(\\d+)'])
-    expect(vueRouterToRou3('/users/:id(\\d+)?')).toEqual(['/users/:id(\\d+)?'])
-    expect(vueRouterToRou3('/articles/article-:slug([^/]+)')).toEqual(['/articles/article-:slug([^/]+)'])
-    expect(vueRouterToRou3('/repeat/:id(\\d+)+')).toEqual(['/repeat/:id+'])
+    expect(patterns('/users/:id(\\d+)')).toEqual(['/users/:id(\\d+)'])
+    expect(patterns('/users/:id(\\d+)?')).toEqual(['/users/:id(\\d+)?'])
+    expect(patterns('/articles/article-:slug([^/]+)')).toEqual(['/articles/article-:slug([^/]+)'])
+    expect(patterns('/repeat/:id(\\d+)+')).toEqual(['/repeat/:id+'])
   })
 
   it('handles escaped parentheses inside a custom regexp', () => {
-    expect(vueRouterToRou3('/:custom(a\\(b)/tail')).toEqual(['/:custom(a\\(b)/tail'])
-    expect(vueRouterToRou3('/:x(a\\')).toEqual(['/a'])
+    expect(patterns('/:custom(a\\(b)/tail')).toEqual(['/:custom(a\\(b)/tail'])
+    expect(patterns('/:x(a\\')).toEqual(['/a'])
   })
 
   it('preserves plain and trailing-slash paths', () => {
-    expect(vueRouterToRou3('/')).toEqual(['/'])
-    expect(vueRouterToRou3('/static/path/')).toEqual(['/static/path/'])
+    expect(patterns('/')).toEqual(['/'])
+    expect(patterns('/static/path/')).toEqual(['/static/path/'])
   })
 
   it('treats an escaped colon as a literal', () => {
-    expect(vueRouterToRou3('/foo\\:bar')).toEqual(['/foo\\:bar'])
-    expect(vueRouterToRou3('/foo\\')).toEqual(['/foo\\\\'])
+    expect(patterns('/foo\\:bar')).toEqual(['/foo\\:bar'])
+    expect(patterns('/foo\\')).toEqual(['/foo\\\\'])
+  })
+
+  it('collapses to catch-all globs from the first dynamic segment', () => {
+    expect(patterns('/products/:id', { collapse: true })).toEqual(['/products/**'])
+    expect(patterns('/products/:id/edit', { collapse: true })).toEqual(['/products/**'])
+    expect(patterns('/blog/:a/:b', { collapse: true })).toEqual(['/blog/**'])
+    expect(patterns('/article-:slug/edit', { collapse: true })).toEqual(['/**'])
+    expect(patterns('/static/path', { collapse: true })).toEqual(['/static/path'])
+    expect(patterns('/static/path/', { collapse: true })).toEqual(['/static/path/'])
+    expect(patterns('/', { collapse: true })).toEqual(['/'])
+    expect(patterns('/foo\\:bar', { collapse: true })).toEqual(['/foo\\:bar'])
+  })
+
+  it('expands enumerable params before collapsing', () => {
+    expect(patterns('/:locale(de|fr)/account', { collapse: true })).toEqual(['/de/account', '/fr/account'])
+    expect(patterns('/:locale(de|fr)/account/:id', { collapse: true })).toEqual(['/de/account/**', '/fr/account/**'])
+    expect(patterns('/:locale(de|fr)/account', { collapse: true, expand: false })).toEqual(['/**'])
+    expect(patterns('/:a(a|b|c)/:b', { collapse: true, maxExpansions: 2 })).toEqual(['/**'])
+  })
+
+  it('reports risky conversions as issues', () => {
+    const issues = (path: string, options?: Parameters<typeof vueRouterToRou3>[1]) =>
+      vueRouterToRou3(path, options).issues.map(issue => issue.type)
+
+    expect(issues('/products/:id', { collapse: true })).toEqual(['collapsed'])
+    expect(vueRouterToRou3('/products/:id', { collapse: true }).issues[0]!.param).toBe('id')
+    expect(vueRouterToRou3('/blog/:a-:b', { collapse: true }).issues[0]!.param).toBeUndefined()
+    expect(issues('/repeat/:id(\\d+)+')).toEqual(['dropped-regexp'])
+    expect(issues('/:pathMatch(.*)*')).toEqual([])
+    expect(issues('/:a(a|b|c)/:b(d|e|f)', { maxExpansions: 4 })).toEqual(['max-expansions'])
+    expect(issues('/:a(a|b)-:b(c|d)', { maxExpansions: 2 })).toEqual(['max-expansions'])
+    expect(issues('/de/account/verify')).toEqual([])
+    expect(issues('/:locale(de|fr)/account')).toEqual([])
+    expect(issues('/:locale(de|fr)/account', { collapse: true })).toEqual([])
   })
 
   it('can disable expansion', () => {
-    expect(vueRouterToRou3('/:locale(de|fr)/account', { expand: false })).toEqual([
+    expect(patterns('/:locale(de|fr)/account', { expand: false })).toEqual([
       '/:locale(de|fr)/account',
     ])
   })
 
   it('falls back to a constrained param when expansion would exceed the limit', () => {
-    expect(vueRouterToRou3('/:a(a|b|c)/:b(d|e|f)', { maxExpansions: 4 })).toEqual([
+    expect(patterns('/:a(a|b|c)/:b(d|e|f)', { maxExpansions: 4 })).toEqual([
       '/a/:b(d|e|f)',
       '/b/:b(d|e|f)',
       '/c/:b(d|e|f)',
@@ -345,7 +381,7 @@ describe('vueRouterToRou3', () => {
   })
 
   it('bounds expansion of multiple params within a single segment', () => {
-    expect(vueRouterToRou3('/:a(a|b)-:b(c|d)-:c(e|f)', { maxExpansions: 4 })).toEqual([
+    expect(patterns('/:a(a|b)-:b(c|d)-:c(e|f)', { maxExpansions: 4 })).toEqual([
       '/a-c-:c(e|f)',
       '/a-d-:c(e|f)',
       '/b-c-:c(e|f)',
