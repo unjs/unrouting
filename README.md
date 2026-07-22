@@ -299,7 +299,7 @@ function vueRouterToRou3(path: string, options?: VueRouterToRou3Options): VueRou
 interface VueRouterToRou3Options {
   /** Expand finite alternation params (`:locale(de|fr)`) into concrete paths. @default true */
   expand?: boolean
-  /** Max paths a single input may expand to before falling back to a dynamic param. @default 100 */
+  /** Max paths a single input may expand to before falling back to a dynamic param. Must be a positive integer or a TypeError is thrown. @default 100 */
   maxExpansions?: number
   /** Collapse each result into a catch-all glob from its first dynamic segment. @default false */
   collapse?: boolean
@@ -313,7 +313,7 @@ interface VueRouterToRou3Result {
 }
 ```
 
-Params carrying a finite alternation regexp are expanded into concrete paths; other custom regexps are preserved as rou3 param constraints where rou3 enforces them (plain and optional params) and dropped on repeatable params, where rou3 ignores them.
+Params carrying a finite alternation regexp are expanded into concrete paths; other custom regexps are preserved as rou3 param constraints where rou3 enforces them (plain and optional params). They are dropped on repeatable params (rou3 ignores them there) and when the regexp contains `/` (rou3 splits patterns on slashes and cannot represent it).
 
 ```ts
 import { vueRouterToRou3 } from 'unrouting'

@@ -439,8 +439,10 @@ export interface VueRouterToRou3Issue {
   /**
    * - `collapsed`: the path (or its remainder) was replaced with a `**`
    *   catch-all, which also matches nested paths the original did not.
-   * - `dropped-regexp`: a repeatable param's custom regexp was dropped
-   *   because rou3 does not enforce constraints on repeatable params.
+   * - `dropped-regexp`: a param's custom regexp was dropped, either because
+   *   the param is repeatable (rou3 does not enforce constraints there) or
+   *   because the regexp contains `/` (rou3 splits patterns on slashes and
+   *   cannot represent it).
    * - `max-expansions`: enumerating an alternation was abandoned because it
    *   would exceed `maxExpansions`; a dynamic param was emitted instead.
    */
@@ -472,8 +474,9 @@ const ENUMERABLE_ALTERNATION_RE = /^[\w.~-]+(?:\|[\w.~-]+)*$/
  * `['/de/account/verify', '/fr/account/verify']`. Other params degrade to
  * rou3 dynamic (`:id`), repeatable (`:id+`), optional (`:id?`) or catch-all
  * (`:id*` / `**`) segments. Custom regexps are preserved as rou3 param
- * constraints where rou3 enforces them (plain and optional params); rou3
- * ignores constraints on repeatable params, so they are dropped there.
+ * constraints where rou3 enforces them (plain and optional params); they are
+ * dropped on repeatable params (rou3 ignores them there) and when the regexp
+ * contains `/` (rou3 cannot represent it).
  *
  * Any lossy or widening step taken along the way is recorded in `issues`, so
  * callers can surface risky conversions to their users.
@@ -489,6 +492,8 @@ const ENUMERABLE_ALTERNATION_RE = /^[\w.~-]+(?:\|[\w.~-]+)*$/
 export function vueRouterToRou3(path: string, options: VueRouterToRou3Options = {}): VueRouterToRou3Result {
   const expand = options.expand ?? true
   const maxExpansions = options.maxExpansions ?? 100
+  if (!Number.isInteger(maxExpansions) || maxExpansions < 1)
+    throw new TypeError(`[unrouting] \`maxExpansions\` must be a positive integer (got ${maxExpansions})`)
   const collapse = options.collapse ?? false
 
   const issues: VueRouterToRou3Issue[] = []
@@ -628,7 +633,21 @@ function vueRouterTokenToRou3(token: VueRouterPathToken, expand: boolean, report
   const name = sanitizeRou3Param(token.value)
   // rou3 only enforces `(regexp)` constraints on plain and optional params;
   // repeatable params silently ignore them, so no point emitting them there.
-  const constraint = token.regexp && (token.modifier === '' || token.modifier === '?') ? `(${token.regexp})` : ''
+  // Constraints containing `/` are dropped too: rou3 splits patterns on
+  // slashes before parsing params, producing an invalid regexp.
+  let constraint = ''
+  if (token.regexp && (token.modifier === '' || token.modifier === '?')) {
+    if (token.regexp.includes('/')) {
+      report?.({
+        type: 'dropped-regexp',
+        param: token.value,
+        message: `Dropped custom regexp "(${token.regexp})" on param ":${token.value}" because rou3 cannot represent constraints containing "/"`,
+      })
+    }
+    else {
+      constraint = `(${token.regexp})`
+    }
+  }
   switch (token.modifier) {
     case '?':
       return [`:${name}${constraint}?`]

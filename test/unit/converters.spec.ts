@@ -313,8 +313,12 @@ describe('vueRouterToRou3', () => {
   it('preserves non-enumerable custom regexps as rou3 constraints', () => {
     expect(patterns('/users/:id(\\d+)')).toEqual(['/users/:id(\\d+)'])
     expect(patterns('/users/:id(\\d+)?')).toEqual(['/users/:id(\\d+)?'])
-    expect(patterns('/articles/article-:slug([^/]+)')).toEqual(['/articles/article-:slug([^/]+)'])
     expect(patterns('/repeat/:id(\\d+)+')).toEqual(['/repeat/:id+'])
+  })
+
+  it('drops custom regexps containing a slash', () => {
+    expect(patterns('/articles/article-:slug([^/]+)')).toEqual(['/articles/article-:slug'])
+    expect(vueRouterToRou3('/articles/article-:slug([^/]+)').issues.map(issue => issue.type)).toEqual(['dropped-regexp'])
   })
 
   it('handles escaped parentheses inside a custom regexp', () => {
@@ -364,6 +368,13 @@ describe('vueRouterToRou3', () => {
     expect(issues('/de/account/verify')).toEqual([])
     expect(issues('/:locale(de|fr)/account')).toEqual([])
     expect(issues('/:locale(de|fr)/account', { collapse: true })).toEqual([])
+  })
+
+  it('rejects invalid maxExpansions values', () => {
+    expect(() => vueRouterToRou3('/x', { maxExpansions: Number.NaN })).toThrow(TypeError)
+    expect(() => vueRouterToRou3('/x', { maxExpansions: 0 })).toThrow(TypeError)
+    expect(() => vueRouterToRou3('/x', { maxExpansions: -1 })).toThrow(TypeError)
+    expect(() => vueRouterToRou3('/x', { maxExpansions: 4.5 })).toThrow(TypeError)
   })
 
   it('can disable expansion', () => {
