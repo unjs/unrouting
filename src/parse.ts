@@ -168,6 +168,7 @@ export function parseSegment(segment: string, absolutePath?: string, warn?: (mes
   let state: State = 'initial'
   let i = 0
   let buffer = ''
+  let optionalCatchall = false
   const tokens: ParsedPathSegmentToken[] = []
 
   function flush(type: SegmentType) {
@@ -213,12 +214,13 @@ export function parseSegment(segment: string, absolutePath?: string, warn?: (mes
       case 'group':
         if (buffer === '...') {
           buffer = ''
+          optionalCatchall = state === 'optional'
           state = 'catchall'
         }
         if (c === '[' && state === 'dynamic')
           state = 'optional'
 
-        if (c === ']' && (state !== 'optional' || segment[i - 1] === ']')) {
+        if (c === ']' && ((state !== 'optional' && !optionalCatchall) || segment[i - 1] === ']')) {
           if (!buffer)
             throw new Error('Empty param')
 
@@ -233,6 +235,7 @@ export function parseSegment(segment: string, absolutePath?: string, warn?: (mes
           else {
             flush(state)
           }
+          optionalCatchall = false
           state = 'initial'
         }
         else if (c === ')' && state === 'group') {
