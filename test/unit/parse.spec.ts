@@ -61,6 +61,21 @@ describe('parsing vue file paths', () => {
     `)
   })
 
+  it('parses optional catch-all segments as catchall tokens', () => {
+    expect(parseSegment('[[...slug]]')).toEqual([
+      { type: 'catchall', value: 'slug' },
+    ])
+    expect(parseSegment('[...slug]')).toEqual([
+      { type: 'catchall', value: 'slug' },
+    ])
+    const [result] = parsePath(['b/[id]/[[...slug]].vue'])
+    expect(result.segments).toEqual([
+      [{ type: 'static', value: 'b' }],
+      [{ type: 'dynamic', value: 'id' }],
+      [{ type: 'catchall', value: 'slug' }],
+    ])
+  })
+
   it('should handle group tokens in parsing', () => {
     const [pure, mixed] = parsePath(['(group).vue', '(group)[slug].vue'])
     expect(pure.segments[0]).toEqual([
