@@ -43,7 +43,7 @@
     "rou3": "0.9.1",
     "simple-git-hooks": "2.13.1",
     "tsdown": "0.22.13",
-    "typescript": "6.0.3",
+    "typescript": "7.0.2",
     "vite": "8.1.5",
     "vitest": "4.1.10",
     "vue-router": "5.2.0"
