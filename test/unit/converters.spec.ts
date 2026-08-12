@@ -1323,18 +1323,32 @@ describe('static segment encoding', () => {
     expect(toVueRouterSegment([{ type: 'static', value: 'a%2Fb' }])).toBe('a%2Fb')
   })
 
+  it('escapes hash and question mark so they are not read as delimiters', () => {
+    expect(toVueRouterSegment([{ type: 'static', value: 'a#b' }])).toBe('a%23b')
+    expect(toVueRouterSegment([{ type: 'static', value: 'a?b' }])).toBe('a%3Fb')
+  })
+
   it('escapes colons after encoding', () => {
     expect(toVueRouterSegment([{ type: 'static', value: 'a:b&c' }])).toBe('a\\:b&c')
   })
 
-  it('matches the browser pathname in a real router', () => {
-    for (const value of ['a&b', 'a+b', 'a[b]', 'a b', 'ç']) {
-      const router = createVueRouter({
-        history: createMemoryHistory(),
-        routes: [{ path: `/${toVueRouterSegment([{ type: 'static', value }])}`, component: () => ({}) }],
-      })
-      expect(router.resolve(`/${browserEncode(value)}`).matched).toHaveLength(1)
-    }
+  it.each([
+    ['a&b', '/a&b'],
+    ['a+b', '/a+b'],
+    ['a[b]', '/a[b]'],
+    ['a b', '/a%20b'],
+    ['ç', '/%C3%A7'],
+    ['a%2Fb', '/a%2Fb'],
+    // `new URL()` splits these off as hash/search, so the expected URL is given
+    // rather than derived from `browserEncode`.
+    ['a#b', '/a%23b'],
+    ['a?b', '/a%3Fb'],
+  ])('matches a request for %s in a real router', (value, url) => {
+    const router = createVueRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: `/${toVueRouterSegment([{ type: 'static', value }])}`, component: () => ({}) }],
+    })
+    expect(router.resolve(url).matched).toHaveLength(1)
   })
 })
 
