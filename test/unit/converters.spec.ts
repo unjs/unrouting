@@ -1298,6 +1298,46 @@ describe('toVueRouterSegment', () => {
   })
 })
 
+describe('static segment encoding', () => {
+  /** How a browser reports the segment in `location.pathname`. */
+  const browserEncode = (segment: string) => new URL(`/${segment}`, 'http://localhost').pathname.slice(1)
+
+  it.each([
+    ['a&b', 'a&b'],
+    ['a+b', 'a+b'],
+    ['a[b]', 'a[b]'],
+    ['a b', 'a%20b'],
+    ['ç', '%C3%A7'],
+    ['a|b', 'a|b'],
+  ])('encodes %s as vue-router and the browser do', (value, expected) => {
+    expect(toVueRouterSegment([{ type: 'static', value }])).toBe(expected)
+    expect(browserEncode(value)).toBe(expected)
+  })
+
+  it('escapes a literal percent sign', () => {
+    expect(toVueRouterSegment([{ type: 'static', value: '100%' }])).toBe('100%25')
+    expect(toVueRouterSegment([{ type: 'static', value: 'a%25b' }])).toBe('a%2525b')
+  })
+
+  it('passes through an encoded slash', () => {
+    expect(toVueRouterSegment([{ type: 'static', value: 'a%2Fb' }])).toBe('a%2Fb')
+  })
+
+  it('escapes colons after encoding', () => {
+    expect(toVueRouterSegment([{ type: 'static', value: 'a:b&c' }])).toBe('a\\:b&c')
+  })
+
+  it('matches the browser pathname in a real router', () => {
+    for (const value of ['a&b', 'a+b', 'a[b]', 'a b', 'ç']) {
+      const router = createVueRouter({
+        history: createMemoryHistory(),
+        routes: [{ path: `/${toVueRouterSegment([{ type: 'static', value }])}`, component: () => ({}) }],
+      })
+      expect(router.resolve(`/${browserEncode(value)}`).matched).toHaveLength(1)
+    }
+  })
+})
+
 describe('toVueRouterPath', () => {
   it('converts single-segment paths', () => {
     const parsed = parsePath(['about.vue'])[0]

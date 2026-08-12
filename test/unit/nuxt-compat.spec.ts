@@ -213,7 +213,7 @@ describe('nuxt compatibility: generateRoutes from files', () => {
       `${pagesDir}/a&b.vue`,
       `${pagesDir}/a\\b.vue`,
     ]), [
-      { name: 'a&b', path: `/a${encodeURIComponent('&')}b`, file: `${pagesDir}/a&b.vue`, children: [] },
+      { name: 'a&b', path: '/a&b', file: `${pagesDir}/a&b.vue`, children: [] },
       { name: 'a\\b', path: `/a${encodeURIComponent('\\')}b`, file: `${pagesDir}/a\\b.vue`, children: [] },
     ])
   })

@@ -2,7 +2,7 @@ import type { ParsedPathSegment, ParsedPathSegmentToken } from './parse'
 import type { RouteNodeFile, RouteTree } from './tree'
 
 import escapeStringRegexp from 'escape-string-regexp'
-import { encodePath, joinURL } from 'ufo'
+import { joinURL } from 'ufo'
 
 const collator = new Intl.Collator('en-US')
 
@@ -853,7 +853,7 @@ export function toVueRouterSegment(
       case 'group':
         continue
       case 'static':
-        out += encodePath(token.value).replace(/:/g, '\\:')
+        out += encodeVueRouterPath(token.value).replace(/:/g, '\\:')
         break
 
       case 'dynamic':
@@ -1008,6 +1008,30 @@ function prepareRoutes(
 
     return out
   })
+}
+
+const ENC_PIPE_RE = /%7C/g
+const ENC_BRACKET_OPEN_RE = /%5B/g
+const ENC_BRACKET_CLOSE_RE = /%5D/g
+const ENC_ENC_SLASH_RE = /%252F/gi
+const HASH_RE = /#/g
+const QUESTION_MARK_RE = /\?/g
+
+/**
+ * Encode a static path segment the way Vue Router encodes paths, so that the
+ * emitted record matches the `location.pathname` a browser reports. Vue Router
+ * leaves `&`, `+`, `[` and `]` literal where ufo's `encodePath` escapes them.
+ *
+ * `%2F` survives unescaped, so a filename can still express an encoded slash.
+ */
+function encodeVueRouterPath(value: string): string {
+  return encodeURI(value)
+    .replace(ENC_PIPE_RE, '|')
+    .replace(ENC_BRACKET_OPEN_RE, '[')
+    .replace(ENC_BRACKET_CLOSE_RE, ']')
+    .replace(HASH_RE, '%23')
+    .replace(QUESTION_MARK_RE, '%3F')
+    .replace(ENC_ENC_SLASH_RE, '%2F')
 }
 
 /** Unescaped colon = dynamic param marker in vue-router path format. */
