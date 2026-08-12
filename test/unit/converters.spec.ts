@@ -1298,6 +1298,60 @@ describe('toVueRouterSegment', () => {
   })
 })
 
+describe('static segment encoding', () => {
+  /** How a browser reports the segment in `location.pathname`. */
+  const browserEncode = (segment: string) => new URL(`/${segment}`, 'http://localhost').pathname.slice(1)
+
+  it.each([
+    ['a&b', 'a&b'],
+    ['a+b', 'a+b'],
+    ['a[b]', 'a[b]'],
+    ['a b', 'a%20b'],
+    ['ç', '%C3%A7'],
+    ['a|b', 'a|b'],
+  ])('encodes %s as vue-router and the browser do', (value, expected) => {
+    expect(toVueRouterSegment([{ type: 'static', value }])).toBe(expected)
+    expect(browserEncode(value)).toBe(expected)
+  })
+
+  it('escapes a literal percent sign', () => {
+    expect(toVueRouterSegment([{ type: 'static', value: '100%' }])).toBe('100%25')
+    expect(toVueRouterSegment([{ type: 'static', value: 'a%25b' }])).toBe('a%2525b')
+  })
+
+  it('passes through an encoded slash', () => {
+    expect(toVueRouterSegment([{ type: 'static', value: 'a%2Fb' }])).toBe('a%2Fb')
+  })
+
+  it('escapes hash and question mark so they are not read as delimiters', () => {
+    expect(toVueRouterSegment([{ type: 'static', value: 'a#b' }])).toBe('a%23b')
+    expect(toVueRouterSegment([{ type: 'static', value: 'a?b' }])).toBe('a%3Fb')
+  })
+
+  it('escapes colons after encoding', () => {
+    expect(toVueRouterSegment([{ type: 'static', value: 'a:b&c' }])).toBe('a\\:b&c')
+  })
+
+  it.each([
+    ['a&b', '/a&b'],
+    ['a+b', '/a+b'],
+    ['a[b]', '/a[b]'],
+    ['a b', '/a%20b'],
+    ['ç', '/%C3%A7'],
+    ['a%2Fb', '/a%2Fb'],
+    // `new URL()` splits these off as hash/search, so the expected URL is given
+    // rather than derived from `browserEncode`.
+    ['a#b', '/a%23b'],
+    ['a?b', '/a%3Fb'],
+  ])('matches a request for %s in a real router', (value, url) => {
+    const router = createVueRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: `/${toVueRouterSegment([{ type: 'static', value }])}`, component: () => ({}) }],
+    })
+    expect(router.resolve(url).matched).toHaveLength(1)
+  })
+})
+
 describe('toVueRouterPath', () => {
   it('converts single-segment paths', () => {
     const parsed = parsePath(['about.vue'])[0]
