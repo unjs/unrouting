@@ -550,7 +550,7 @@ users/index.vue + users/[id].vue
   → { path: '/users', file: 'users/index.vue', children: [{ path: ':id()' }] }
 ```
 
-Route groups `(name)` are transparent – they don't affect paths or nesting, but are stored in `meta.groups`.
+Route groups `(name)` are transparent – they don't affect paths or nesting (unless a group layout file such as `(name).vue` is present to wrap group children), and are stored in `meta.groups`.
 
 ## Development
 
