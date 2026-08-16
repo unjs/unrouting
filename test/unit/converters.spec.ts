@@ -710,8 +710,255 @@ describe('vue-router support', () => {
 
   it('should handle group segments', () => {
     const result = toVueRouter4(tree(['(group).vue', '(group)[slug].vue']))
-    expect(result.find(r => r.file === '(group).vue')?.path).toBe('/')
+    expect(result.find(r => r.file === '(group).vue')?.path).toBe('')
     expect(result.find(r => r.file === '(group)[slug].vue')?.path).toBe('/:slug()')
+  })
+
+  it('should pair (group).vue as pathless parent layout for (group)/ children', () => {
+    const result = toVueRouter4(buildTree([
+      'pages/(auth).vue',
+      'pages/(auth)/login.vue',
+      'pages/(auth)/register.vue',
+    ], { roots: ['pages/'] }))
+
+    expect(result).toEqual([
+      {
+        path: '',
+        file: 'pages/(auth).vue',
+        meta: { groups: ['auth'] },
+        children: [
+          {
+            name: 'login',
+            path: 'login',
+            file: 'pages/(auth)/login.vue',
+            meta: { groups: ['auth'] },
+            children: [],
+          },
+          {
+            name: 'register',
+            path: 'register',
+            file: 'pages/(auth)/register.vue',
+            meta: { groups: ['auth'] },
+            children: [],
+          },
+        ],
+      },
+    ])
+  })
+
+  it('should handle (group).vue with (group)/index.vue', () => {
+    const result = toVueRouter4(buildTree([
+      'pages/(auth).vue',
+      'pages/(auth)/index.vue',
+      'pages/(auth)/login.vue',
+    ], { roots: ['pages/'] }))
+
+    expect(result).toEqual([
+      {
+        path: '',
+        file: 'pages/(auth).vue',
+        meta: { groups: ['auth'] },
+        children: [
+          {
+            name: 'login',
+            path: 'login',
+            file: 'pages/(auth)/login.vue',
+            meta: { groups: ['auth'] },
+            children: [],
+          },
+          {
+            name: 'index',
+            path: '',
+            file: 'pages/(auth)/index.vue',
+            meta: { groups: ['auth'] },
+            children: [],
+          },
+        ],
+      },
+    ])
+  })
+
+  it('should handle nested groups with parent file on outer group only', () => {
+    const result = toVueRouter4(buildTree([
+      'pages/(admin).vue',
+      'pages/(admin)/(dashboard)/settings.vue',
+    ], { roots: ['pages/'] }))
+
+    expect(result).toEqual([
+      {
+        path: '',
+        file: 'pages/(admin).vue',
+        meta: { groups: ['admin'] },
+        children: [
+          {
+            name: 'settings',
+            path: 'settings',
+            file: 'pages/(admin)/(dashboard)/settings.vue',
+            meta: { groups: ['admin', 'dashboard'] },
+            children: [],
+          },
+        ],
+      },
+    ])
+  })
+
+  it('should handle nested groups with parent files on both groups', () => {
+    const result = toVueRouter4(buildTree([
+      'pages/(admin).vue',
+      'pages/(admin)/(dashboard).vue',
+      'pages/(admin)/(dashboard)/settings.vue',
+    ], { roots: ['pages/'] }))
+
+    expect(result).toEqual([
+      {
+        path: '',
+        file: 'pages/(admin).vue',
+        meta: { groups: ['admin'] },
+        children: [
+          {
+            path: '',
+            file: 'pages/(admin)/(dashboard).vue',
+            meta: { groups: ['admin', 'dashboard'] },
+            children: [
+              {
+                name: 'settings',
+                path: 'settings',
+                file: 'pages/(admin)/(dashboard)/settings.vue',
+                meta: { groups: ['admin', 'dashboard'] },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    ])
+  })
+
+  it('should handle groups without parent files (backward compatibility)', () => {
+    const result = toVueRouter4(buildTree([
+      'pages/(auth)/login.vue',
+      'pages/(auth)/register.vue',
+    ], { roots: ['pages/'] }))
+
+    expect(result).toEqual([
+      {
+        name: 'login',
+        path: '/login',
+        file: 'pages/(auth)/login.vue',
+        meta: { groups: ['auth'] },
+        children: [],
+      },
+      {
+        name: 'register',
+        path: '/register',
+        file: 'pages/(auth)/register.vue',
+        meta: { groups: ['auth'] },
+        children: [],
+      },
+    ])
+  })
+
+  it('should handle mixed standard nested routes and grouped parent routes', () => {
+    const result = toVueRouter4(buildTree([
+      'pages/users.vue',
+      'pages/users/(admin).vue',
+      'pages/users/(admin)/settings.vue',
+      'pages/users/profile.vue',
+    ], { roots: ['pages/'] }))
+
+    expect(result).toEqual([
+      {
+        name: 'users',
+        path: '/users',
+        file: 'pages/users.vue',
+        children: [
+          {
+            name: 'users-profile',
+            path: 'profile',
+            file: 'pages/users/profile.vue',
+            children: [],
+          },
+          {
+            path: '',
+            file: 'pages/users/(admin).vue',
+            meta: { groups: ['admin'] },
+            children: [
+              {
+                name: 'users-settings',
+                path: 'settings',
+                file: 'pages/users/(admin)/settings.vue',
+                meta: { groups: ['admin'] },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    ])
+  })
+
+  it('should handle grouped parent routes with standard nested routes inside', () => {
+    const result = toVueRouter4(buildTree([
+      'pages/(group).vue',
+      'pages/(group)/parent.vue',
+      'pages/(group)/parent/child.vue',
+    ], { roots: ['pages/'] }))
+
+    expect(result).toEqual([
+      {
+        path: '',
+        file: 'pages/(group).vue',
+        meta: { groups: ['group'] },
+        children: [
+          {
+            name: 'parent',
+            path: 'parent',
+            file: 'pages/(group)/parent.vue',
+            meta: { groups: ['group'] },
+            children: [
+              {
+                name: 'parent-child',
+                path: 'child',
+                file: 'pages/(group)/parent/child.vue',
+                meta: { groups: ['group'] },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    ])
+  })
+
+  it('should clear parent route name when nested group parent contains an index child', () => {
+    const result = toVueRouter4(buildTree([
+      'pages/users.vue',
+      'pages/users/(admin).vue',
+      'pages/users/(admin)/index.vue',
+    ], { roots: ['pages/'] }))
+
+    expect(result).toEqual([
+      {
+        path: '/users',
+        file: 'pages/users.vue',
+        children: [
+          {
+            path: '',
+            file: 'pages/users/(admin).vue',
+            meta: { groups: ['admin'] },
+            children: [
+              {
+                name: 'users',
+                path: '',
+                file: 'pages/users/(admin)/index.vue',
+                meta: { groups: ['admin'] },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    ])
   })
 
   it('should handle empty segments', () => {
@@ -1235,6 +1482,33 @@ describe('incremental removeFile', () => {
     const bNode = aNode.children.get('b')!
     expect(bNode.children.has('c')).toBe(false)
     expect(bNode.children.has('other')).toBe(true)
+  })
+
+  it('handles adding and removing group parent files incrementally', () => {
+    const t = buildTree(['(auth)/login.vue', '(auth)/register.vue'])
+    expect(toVueRouter4(t)).toEqual([
+      { name: 'login', path: '/login', file: '(auth)/login.vue', meta: { groups: ['auth'] }, children: [] },
+      { name: 'register', path: '/register', file: '(auth)/register.vue', meta: { groups: ['auth'] }, children: [] },
+    ])
+
+    addFile(t, '(auth).vue')
+    expect(toVueRouter4(t)).toEqual([
+      {
+        path: '',
+        file: '(auth).vue',
+        meta: { groups: ['auth'] },
+        children: [
+          { name: 'login', path: 'login', file: '(auth)/login.vue', meta: { groups: ['auth'] }, children: [] },
+          { name: 'register', path: 'register', file: '(auth)/register.vue', meta: { groups: ['auth'] }, children: [] },
+        ],
+      },
+    ])
+
+    removeFile(t, '(auth).vue')
+    expect(toVueRouter4(t)).toEqual([
+      { name: 'login', path: '/login', file: '(auth)/login.vue', meta: { groups: ['auth'] }, children: [] },
+      { name: 'register', path: '/register', file: '(auth)/register.vue', meta: { groups: ['auth'] }, children: [] },
+    ])
   })
 })
 
