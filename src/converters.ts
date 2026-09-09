@@ -4,6 +4,8 @@ import type { RouteNodeFile, RouteTree } from './tree'
 import escapeStringRegexp from 'escape-string-regexp'
 import { joinURL } from 'ufo'
 
+import { segmentToKey } from './tree'
+
 const collator = new Intl.Collator('en-US')
 
 // --- Types -------------------------------------------------------------------
@@ -88,6 +90,7 @@ interface FlatFileInfo {
   file: string
   relativePath: string
   segments: ParsedPathSegment[]
+  originalSegments: ParsedPathSegment[]
   groups: string[]
   siblingFiles: RouteNodeFile[]
 }
@@ -121,6 +124,7 @@ function flattenTree(tree: RouteTree): FlatFileInfo[] {
         file: primary.path,
         relativePath: primary.relativePath,
         segments,
+        originalSegments: primary.originalSegments,
         groups: primary.groups,
         siblingFiles: [
           ...groupFiles,
@@ -224,6 +228,9 @@ export function toVueRouter4<const Attrs extends Record<string, string[]> = neve
   const routes: IntermediateRoute[] = []
 
   for (const info of fileInfos) {
+    const isGroupFile = info.originalSegments.length > 0 && info.originalSegments[info.originalSegments.length - 1].every(t => t.type === 'group')
+    const groupSegKey = isGroupFile ? segmentToKey(info.originalSegments[info.originalSegments.length - 1]) : undefined
+
     const route: IntermediateRoute = {
       name: '',
       path: '',
@@ -231,14 +238,25 @@ export function toVueRouter4<const Attrs extends Record<string, string[]> = neve
       children: [],
       groups: info.groups,
       siblingFiles: info.siblingFiles,
+      isGroupParent: isGroupFile,
+      groupSegmentKey: groupSegKey,
     }
     let parent = routes
 
-    if (info.segments.length === 0)
-      route.path = '/'
+    for (let i = 0; i < info.originalSegments.length; i++) {
+      const seg = info.originalSegments[i]
+      const isGroup = seg.every(t => t.type === 'group')
 
-    for (let i = 0; i < info.segments.length; i++) {
-      const seg = info.segments[i]
+      if (isGroup) {
+        const segKey = segmentToKey(seg)
+        const match = parent.find(r => r.isGroupParent && r.groupSegmentKey === segKey)
+        if (match?.children) {
+          parent = match.children
+          route.path = ''
+        }
+        continue
+      }
+
       const isIndex = isIndexSegment(seg)
       const segmentName = isIndex
         ? 'index'
@@ -246,8 +264,8 @@ export function toVueRouter4<const Attrs extends Record<string, string[]> = neve
 
       route.name += (route.name && '/') + segmentName
 
-      const nextSeg = i < info.segments.length - 1 ? info.segments[i + 1] : undefined
-      const hasNextNonIndex = !!nextSeg && !isIndexSegment(nextSeg)
+      const nextSeg = i < info.originalSegments.length - 1 ? info.originalSegments[i + 1] : undefined
+      const hasNextNonIndex = !!nextSeg && !isIndexSegment(nextSeg) && !nextSeg.every(t => t.type === 'group')
       const routePath = `/${toVueRouterSegment(seg, { hasSucceeding: hasNextNonIndex })}`
       const fullPath = joinURL(route.path || '/', isIndex ? '/' : routePath)
       const normalizedFullPath = fullPath.replaceAll('([^/]*)*', '(.*)*')
@@ -820,6 +838,11 @@ function compareRoutes(a: IntermediateRoute, b: IntermediateRoute): number {
       return sb - sa
   }
 
+  const aHasDefault = hasDefaultChild(a) ? 1 : 0
+  const bHasDefault = hasDefaultChild(b) ? 1 : 0
+  if (aHasDefault !== bHasDefault)
+    return bHasDefault - aHasDefault
+
   return collator.compare(a.path, b.path)
 }
 
@@ -924,13 +947,28 @@ interface IntermediateRoute {
   groups: string[]
   siblingFiles: RouteNodeFile[]
   scoreSegments?: number[]
+  isGroupParent?: boolean
+  groupSegmentKey?: string
 }
 
 const INDEX_RE = /\/index$/
 const SLASH_RE = /\//g
 
 function defaultGetRouteName(rawName: string): string {
-  return rawName.replace(INDEX_RE, '').replace(SLASH_RE, '-') || 'index'
+  return rawName.replace(INDEX_RE, '').replace(SLASH_RE, '-')
+}
+
+function hasDefaultChild(route: IntermediateRoute): boolean {
+  for (const child of route.children) {
+    if (child.isGroupParent) {
+      if (hasDefaultChild(child))
+        return true
+    }
+    else if (child.path === '' || child.path === '/') {
+      return true
+    }
+  }
+  return false
 }
 
 function prepareRoutes(
@@ -948,13 +986,13 @@ function prepareRoutes(
   routes.sort(compareRoutes)
 
   return routes.map((route) => {
-    let name: string | undefined = getRouteName(route.name)
+    let name: string | undefined = route.isGroupParent ? undefined : getRouteName(route.name)
     let path = route.path
     if (parent && path[0] === '/')
       path = path.slice(1)
 
     const children = route.children.length ? prepareRoutes(route.children, route, options, names) : []
-    if (children.some(c => c.path === ''))
+    if (hasDefaultChild(route))
       name = undefined
 
     if (name !== undefined) {
