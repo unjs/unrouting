@@ -10,7 +10,7 @@ packages:
   - playground
 
 overrides:
-  unrouting: 'link:.'
+  unrouting: 'workspace:*'
 
 allowBuilds:
   esbuild: false
