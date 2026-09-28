@@ -274,11 +274,113 @@ export function toVueRouter4<const Attrs extends Record<string, string[]> = neve
 
   const result = prepareRoutes(routes, undefined, options as VueRouterEmitOptions<Record<string, string[]>>)
 
+  // Register the decoded spelling of any percent-encoded static segment, so both
+  // browser (encoded) and programmatic (raw) navigation resolve to the same page.
+  const routesWithTwins = addDecodedTwins(result)
+
   // Cache on the tree
-  ;(tree as any)['~cachedVueRouter'] = { routes: result, optionsKey: key } satisfies CachedVueRouterResult
+  ;(tree as any)['~cachedVueRouter'] = { routes: routesWithTwins, optionsKey: key } satisfies CachedVueRouterResult
   tree['~dirty'] = false
 
-  return cloneRoutes(result) as VueRoute<any>[]
+  return cloneRoutes(routesWithTwins) as VueRoute<any>[]
+}
+
+/**
+ * A multi-byte UTF-8 escape relative to ASCII (`%C0`-`%FF`), e.g. `%D9%85`.
+ * Only these need a twin: a browser reports them encoded while programmatic
+ * navigation uses the raw non-ASCII spelling. Escapes below `0x80` (`%20`,
+ * `%5C`, `%25`, ...) are navigated identically by both sides.
+ */
+const MULTIBYTE_ESCAPE_RE = /%[C-F][0-9A-F]/i
+
+/**
+ * Vue Router matches static path segments literally, so a route emitted with an
+ * encoded path (e.g. `/%D9%85%D9%86%D8%AA%D8%AC%D8%A7%D8%AA`) only matches the
+ * encoded `location.pathname` a browser reports. In-app navigation (NuxtLink,
+ * `navigateTo`) usually passes the raw string (`/منتجات`), which falls through
+ * to a generic `:slug()` route. For every route whose path contains percent-
+ * encoded static segments we therefore also emit an unnamed twin registered
+ * under the decoded path, with children decoded recursively.
+ *
+ * The two spellings are both static records pointing at the same file, so route
+ * ranking keeps choosing them over dynamic fallbacks; names are kept only on
+ * the primary records to avoid duplicate-name warnings.
+ */
+function addDecodedTwins(routes: VueRoute[]): VueRoute[] {
+  const result: VueRoute[] = []
+  for (const route of routes) {
+    result.push(route)
+    // Cheap scan: skip pure-ASCII subtrees entirely (the common case).
+    if (!needsDecodedTwin(route))
+      continue
+    const twin = buildDecodedTwin(route)
+    if (twin)
+      result.push(twin)
+  }
+  return result
+}
+
+/** Whether any static segment anywhere in the subtree needs decoding. */
+function needsDecodedTwin(route: VueRoute): boolean {
+  return MULTIBYTE_ESCAPE_RE.test(route.path) || route.children.some(needsDecodedTwin)
+}
+
+/**
+ * Deep-copy `route` using the decoded spelling of its static segments, with
+ * every node unnamed. Returns `undefined` when the whole subtree needs no
+ * decoding (no percent-encoded static segment anywhere below it).
+ */
+function buildDecodedTwin(route: VueRoute): VueRoute | undefined {
+  const path = decodeVueRouterPath(route.path)
+  const children: VueRoute[] = []
+  let changed = path !== route.path
+  for (const child of route.children) {
+    const childTwin = buildDecodedTwin(child)
+    if (childTwin) {
+      children.push(childTwin)
+      changed = true
+    }
+    else {
+      children.push(anonClone(child))
+    }
+  }
+  if (!changed)
+    return undefined
+  return {
+    ...route,
+    path,
+    children,
+    name: undefined,
+  }
+}
+
+/** Deep copy a subtree with every node unnamed (used for unchanged twin limbs). */
+function anonClone(route: VueRoute): VueRoute {
+  return {
+    ...route,
+    name: undefined,
+    children: route.children.length ? route.children.map(anonClone) : [],
+  }
+}
+
+/**
+ * Decode multi-byte (non-ASCII) static segments in a vue-router path while
+ * leaving dynamic `:param()` tokens and escaped delimiters (`\:`, `(`/`)`)
+ * untouched. Decoded segments are dropped when they would introduce vue-router
+ * path syntax (`:`, `\`, `(`, `)`, `/`).
+ */
+const PATH_SYNTAX_RE = /[:\\()/]/
+
+function decodeVueRouterPath(path: string): string {
+  if (!MULTIBYTE_ESCAPE_RE.test(path))
+    return path
+  return path.split('/').map((segment) => {
+    // Leave dynamic tokens and escaped colons untouched.
+    if (/[:\\()]/.test(segment) || !MULTIBYTE_ESCAPE_RE.test(segment))
+      return segment
+    const decoded = decodeURI(segment)
+    return PATH_SYNTAX_RE.test(decoded) ? segment : decoded
+  }).join('/')
 }
 
 // --- rou3 --------------------------------------------------------------------
