@@ -1778,3 +1778,68 @@ describe('dirty flag', () => {
     expect(t['~dirty']).toBe(false)
   })
 })
+
+describe('decoded static twins', () => {
+  const raw = 'منتجات'
+  const encoded = encodeURIComponent(raw)
+
+  it('emits one unnamed decoded twin per non-ASCII page and none for ascii pages', () => {
+    const routes = toVueRouter4(buildTree([
+      `admin/tables/${raw}/index.vue`,
+      `admin/tables/${raw}/new.vue`,
+      'admin/tables/backups/index.vue',
+    ])) as any[]
+
+    // 3 ascii pages stay 3; the 2 non-ASCII pages each gain an unnamed twin
+    const named = routes.filter(r => r.name)
+    const unnamed = routes.filter(r => !r.name)
+    expect(routes).toHaveLength(5)
+    expect(new Set(named.map(r => r.path))).toEqual(new Set([
+      '/admin/tables/backups',
+      `/admin/tables/${encoded}`,
+      `/admin/tables/${encoded}/new`,
+    ]))
+    expect(new Set(unnamed.map(r => r.path))).toEqual(new Set([
+      `/admin/tables/${raw}`,
+      `/admin/tables/${raw}/new`,
+    ]))
+    for (const r of unnamed)
+      expect(r.name).toBeUndefined()
+  })
+
+  it('resolves both raw and encoded navigation to the same file, beating a generic fallback', () => {
+    const appRoutes = toVueRouter4(buildTree([`admin/tables/${raw}/index.vue`, `admin/tables/${raw}/[id].vue`])) as any[]
+    // layer-style generic fallback, as in txai's inicontent layer
+    const generic = {
+      name: 'generic',
+      path: '/:database?/admin/tables/:table()',
+      children: [] as any[],
+    }
+    const router = createVueRouter({
+      history: createMemoryHistory(),
+      routes: [...appRoutes, generic].map(r => ({ ...r, component: () => ({}) })),
+    })
+
+    const rawTarget = `/admin/tables/${raw}/42`
+    const encTarget = `/admin/tables/${encoded}/42`
+
+    const rawResolved = router.resolve(rawTarget).matched.map(r => r.path).join(' > ')
+    const encResolved = router.resolve(encTarget).matched.map(r => r.path).join(' > ')
+
+    // raw must hit the decoded twin (static), not `:table()`
+    expect(rawResolved).not.toContain(':table()')
+    expect(rawResolved).toContain(`/admin/tables/${raw}/:id()`)
+    // encoded must hit the primary
+    expect(encResolved).toContain(`/admin/tables/${encoded}/:id()`)
+  })
+
+  it('leaves dynamic tokens and escaped colons untouched while decoding statics', () => {
+    const routes = toVueRouter4(buildTree([
+      `admin/tables/${raw}/[id].vue`,
+      `admin/tables/${raw}:sub.vue`,
+    ])) as any[]
+    const twins = routes.filter(r => !r.name)
+    expect(twins).toHaveLength(1)
+    expect(twins[0].path).toBe(`/admin/tables/${raw}/:id()`)
+  })
+})
