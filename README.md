@@ -191,6 +191,7 @@ toVueRouterSegment(tokens) // => ':slug(.*)*'
 | Repeatable | `[slug]+.vue` | One or more segments |
 | Optional repeatable | `[[slug]]+.vue` | Zero or more segments |
 | Group | `(admin)/dashboard.vue` | Route group (transparent to path, stored in meta) |
+| Group Layout | `(admin).vue` + `(admin)/dashboard.vue` | Pathless group parent layout wrapping group children |
 | Mixed | `prefix-[slug]-suffix.vue` | Static and dynamic in one segment |
 | Nested | `parent.vue` + `parent/child.vue` | Parent layout with child routes |
 | Named views | `index@sidebar.vue` | Vue Router named view slots |
@@ -549,7 +550,7 @@ users/index.vue + users/[id].vue
   → { path: '/users', file: 'users/index.vue', children: [{ path: ':id()' }] }
 ```
 
-Route groups `(name)` are transparent – they don't affect paths or nesting, but are stored in `meta.groups`.
+Route groups `(name)` are transparent – they don't affect paths or nesting (unless a group layout file such as `(name).vue` is present to wrap group children), and are stored in `meta.groups`.
 
 ## Development
 
