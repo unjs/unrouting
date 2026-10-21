@@ -1,4 +1,6 @@
+import { createRouter as createRadixRouter, toRouteMatcher } from 'radix3'
 import { addRoute, createRouter, findRoute } from 'rou3'
+import { addRoute as addRouteV0, createRouter as createRouterV0, findRoute as findRouteV0 } from 'rou3-v0'
 import { describe, expect, it } from 'vitest'
 import { rou3PatternToURLPattern } from '../../src'
 
@@ -47,6 +49,18 @@ describe('rou3PatternToURLPattern', () => {
     expect(convert('/files/*.png')).toBe('/files/*.png')
     expect(convert('/files/(.*)')).toBe('/files/(.*)')
     expect(convert('/files/:path(.*)')).toBe('/files/:path(.*)')
+  })
+
+  it('maps single-segment wildcards with `wildcard: \'segment\'`', () => {
+    const convertSegment = (pattern: string, segment?: 'strict' | 'loose') =>
+      rou3PatternToURLPattern(pattern, { wildcard: 'segment', segment })
+
+    expect(convertSegment('/files/*').pattern).toBe('/files/([^\\/]*)')
+    expect(convertSegment('/files/*.png').pattern).toBe('/files/([^\\/]*).png')
+    expect(convertSegment('/api/:v/*/**').pattern).toBe('/api/:v/([^\\/]*)/*')
+    expect(convertSegment('/files/*').issues).toEqual([])
+    expect(convertSegment('/files/*', 'loose')).toMatchObject({ pattern: '/files/*', issues: [{ type: 'widened' }] })
+    expect(convertSegment('/blog/**', 'loose')).toEqual({ pattern: '/blog/*', issues: [] })
   })
 
   it('translates catch-alls to URLPattern greedy wildcard', () => {
@@ -126,6 +140,24 @@ describe('rou3PatternToURLPattern', () => {
       const urlPattern = new URLPattern({ pathname: convert(route) })
       for (const path of paths)
         expect(urlPattern.test({ pathname: path }), `${route} on ${path}`).toBe(!!findRoute(router, 'GET', path))
+    }
+  })
+
+  it('matches the same paths as rou3 0.x and radix3 with `wildcard: \'segment\'`', () => {
+    const cases: Record<string, string[]> = {
+      '/blog/*': ['/blog/a', '/blog/a/b', '/other'],
+      '/blog/*/edit': ['/blog/a/edit', '/blog/a/b/edit', '/blog/edit'],
+      '/blog/**': ['/blog/a', '/blog/a/b'],
+    }
+    for (const [route, paths] of Object.entries(cases)) {
+      const router = createRouterV0()
+      addRouteV0(router, 'GET', route, route)
+      const radix = toRouteMatcher(createRadixRouter({ routes: { [route]: {} } }))
+      const urlPattern = new URLPattern({ pathname: rou3PatternToURLPattern(route, { wildcard: 'segment' }).pattern })
+      for (const path of paths) {
+        expect(urlPattern.test({ pathname: path }), `${route} on ${path} (rou3 0.x)`).toBe(!!findRouteV0(router, 'GET', path))
+        expect(urlPattern.test({ pathname: path }), `${route} on ${path} (radix3)`).toBe(radix.matchAll(path).length > 0)
+      }
     }
   })
 })
