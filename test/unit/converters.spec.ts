@@ -147,7 +147,8 @@ describe('rou3 support', () => {
       '*.vue': ['/\\*', '/*'],
       '**.vue': ['/\\*\\*', '/**'],
       'foo*bar.vue': ['/foo\\*bar', '/foo*bar'],
-      'a+b.vue': ['/a\\+b', '/a+b'],
+      'a+b.vue': ['/a+b', '/a+b'],
+      'x/+[id].vue': ['/x/\\+:id', '/x/+1'],
     }
 
     for (const [file, [pattern, example]] of Object.entries(cases)) {
@@ -391,6 +392,7 @@ describe('vueRouterToRou3', () => {
       '/:locale(de|fr)/account/:id': ['/de/account/1', '/en/account/1'],
       '/users/:id(\\d+)/edit': ['/users', '/users/1/edit', '/users/x/y'],
       '/blog/:slug(.*)*': ['/blog', '/blog/a/b'],
+      '/a+b/about': ['/a+b/about', '/ab/about'],
     }
     for (const [path, urls] of Object.entries(cases)) {
       const { patterns } = vueRouterToRou3(path, { collapse: true })
@@ -494,7 +496,9 @@ describe('vueRouterToRou3', () => {
   })
 
   it('escapes rou3 syntax in static text', () => {
-    expect(patterns('/a+b/c*d/e{f}')).toEqual(['/a\\+b/c\\*d/e\\{f\\}'])
+    expect(patterns('/a+b/c*d/e{f}')).toEqual(['/a+b/c\\*d/e\\{f\\}'])
+    expect(patterns('/a/:x?-+s')).toEqual(['/a/{:x}?-\\+s'])
+    expect(patterns('/:l(de|fr)-a+b')).toEqual(['/de-a+b', '/fr-a+b'])
   })
 
   it('emits `(.*)` params as rou3 catch-alls', () => {

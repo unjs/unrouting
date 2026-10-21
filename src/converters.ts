@@ -289,12 +289,13 @@ export function toRou3(tree: RouteTree): Rou3Route[] {
     let path = '/'
     for (let segmentIndex = 0; segmentIndex < info.segments.length; segmentIndex++) {
       const segment = info.segments[segmentIndex]
+      const dynamic = segment.some(token => token.type !== 'group' && token.type !== 'static')
       let part = ''
       for (const token of segment) {
         if (token.type === 'group')
           continue
         if (token.type === 'static') {
-          part = appendRou3(part, toRou3Static(token.value))
+          part = appendRou3(part, toRou3Static(token.value, dynamic))
           continue
         }
         const name = paramName(token.value)
@@ -347,10 +348,12 @@ function createRou3ParamNames(): (value: string) => string {
   }
 }
 
-const ROU3_STATIC_ESCAPE_RE = /[:(){}\\*?+]/g
+const ROU3_STATIC_ESCAPE_RE = /[:(){}\\*?]/g
+const ROU3_DYNAMIC_SEGMENT_ESCAPE_RE = /[:(){}\\*?+]/g
 
-function toRou3Static(text: string): string {
-  return text.replace(ROU3_STATIC_ESCAPE_RE, char => `\\${char}`)
+/** Escape static text for rou3. `+` is only syntax in a segment that also holds a param. */
+function toRou3Static(text: string, dynamic: boolean): string {
+  return text.replace(dynamic ? ROU3_DYNAMIC_SEGMENT_ESCAPE_RE : ROU3_STATIC_ESCAPE_RE, char => `\\${char}`)
 }
 
 const TRAILING_PARAM_NAME_RE = /:\w+$/
@@ -416,7 +419,8 @@ export interface VueRouterToRou3Options {
    * `['/en/account', '/nl/account']`. Useful for deriving route-rule keys or
    * region prefixes rather than faithful matchers. The output uses no
    * wildcards or modifiers besides `**`, so it matches the same paths in
-   * rou3 0.x, rou3 1.x and radix3.
+   * rou3 0.x, rou3 1.x and radix3, except for static text that has to be
+   * escaped (`:`, `(`, `)`, `{`, `}`, `*`), which radix3 does not unescape.
    *
    * @default false
    */
@@ -651,11 +655,17 @@ function findRou3CatchAllConflict(segments: VueRouterPathToken[][]): number {
 }
 
 function vueRouterSegmentToRou3(segment: string, tokens: VueRouterPathToken[], expand: boolean, maxExpansions = Number.POSITIVE_INFINITY, report?: (issue: VueRouterToRou3Issue) => void): string[] {
-  let parts: string[] = ['']
+  const sharesSegment = tokens.length > 1
+  const resolved: string[][] = []
+  let count = 1
+  let dynamic = false
   for (const token of tokens) {
-    const sharesSegment = tokens.length > 1
+    if (token.type === 'static') {
+      resolved.push([])
+      continue
+    }
     let alternatives = vueRouterTokenToRou3(token, sharesSegment, expand, report)
-    if (parts.length * alternatives.length > maxExpansions) {
+    if (count * alternatives.length > maxExpansions) {
       alternatives = vueRouterTokenToRou3(token, sharesSegment, false)
       report?.({
         type: 'max-expansions',
@@ -663,6 +673,14 @@ function vueRouterSegmentToRou3(segment: string, tokens: VueRouterPathToken[], e
         message: `Expanding param ":${token.value}" in segment "${segment}" would exceed maxExpansions (${maxExpansions}); emitted "${alternatives[0]}" instead`,
       })
     }
+    count *= alternatives.length
+    dynamic ||= !alternatives.every(isStaticRou3Segment)
+    resolved.push(alternatives)
+  }
+
+  let parts: string[] = ['']
+  for (const [index, token] of tokens.entries()) {
+    const alternatives = token.type === 'static' ? [toRou3Static(token.value, dynamic)] : resolved[index]!
     const next: string[] = []
     for (const prefix of parts) {
       for (const alternative of alternatives)
@@ -674,9 +692,6 @@ function vueRouterSegmentToRou3(segment: string, tokens: VueRouterPathToken[], e
 }
 
 function vueRouterTokenToRou3(token: VueRouterPathToken, sharesSegment: boolean, expand: boolean, report?: (issue: VueRouterToRou3Issue) => void): string[] {
-  if (token.type === 'static')
-    return [toRou3Static(token.value)]
-
   // rou3 treats `(.*)` as a catch-all that takes no modifier and also matches empty segments.
   if (token.regexp === '.*')
     return [`:${token.name}(.*)`]
