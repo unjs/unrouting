@@ -73,10 +73,16 @@ describe('rou3 support', () => {
     const pattern = toRou3(tree(['optional/prefix-[[opt]].vue']))[0].path
     addRoute(router, 'GET', pattern, { value: pattern })
 
-    expect(pattern).toBe('/optional/prefix-:opt(.*)')
+    expect(pattern).toBe('/optional/prefix-:opt([^\\x2f]*)')
     expect(findRoute(router, 'GET', '/optional/prefix-')?.params).toEqual({ opt: '' })
     expect(findRoute(router, 'GET', '/optional/prefix-test')?.params).toEqual({ opt: 'test' })
     expect(findRoute(router, 'GET', '/optional/prefix-test/extra')).toBeUndefined()
+
+    const suffixed = createRouter<{ value: string }>()
+    addRoute(suffixed, 'GET', toRou3(tree(['optional/[[opt]]-suffix.vue']))[0].path, { value: 'suffixed' })
+    expect(findRoute(suffixed, 'GET', '/optional/-suffix')?.params).toEqual({ opt: '' })
+    expect(findRoute(suffixed, 'GET', '/optional/test-suffix')?.params).toEqual({ opt: 'test' })
+    expect(findRoute(suffixed, 'GET', '/optional/test/x-suffix')).toBeUndefined()
   })
 
   it('supports repeatable parameters', () => {
@@ -135,9 +141,11 @@ describe('rou3 support', () => {
   it('escapes rou3 special characters in static segments', () => {
     const cases = {
       'test:name.vue': ['/test\\:name', '/test:name'],
-      '{file}.vue': ['/\\{file\\}', '/{file}'],
+      '{file}.vue': ['/\\{file\\}', '/%7Bfile%7D'],
       '*.vue': ['/\\*', '/*'],
       '**.vue': ['/\\*\\*', '/**'],
+      'foo*bar.vue': ['/foo\\*bar', '/foo*bar'],
+      'a+b.vue': ['/a\\+b', '/a+b'],
     }
 
     for (const [file, [pattern, example]] of Object.entries(cases)) {
@@ -163,7 +171,9 @@ describe('rou3 support', () => {
       'file:[slug].vue': ['/file:x', { slug: 'x' }],
       'file+[slug].vue': ['/file+x', { slug: 'x' }],
       'pre*[slug].vue': ['/pre*x', { slug: 'x' }],
-      'café-[slug].vue': ['/café-x', { slug: 'x' }],
+      'café-[slug].vue': ['/caf%C3%A9-x', { slug: 'x' }],
+      '[slug]abc.vue': ['/xabc', { slug: 'x' }],
+      '[b2]_[2b].vue': ['/fi_le', { b2: 'fi', _2b: 'le' }],
     }
 
     for (const [file, [example, params]] of Object.entries(cases)) {
@@ -181,7 +191,6 @@ describe('rou3 support', () => {
   })
 
   it('throws for rou3 patterns that would over-match', () => {
-    expect(() => toRou3(tree(['foo*bar.vue']))).toThrow('cannot represent static segment "foo*bar"')
     expect(() => toRou3(tree(['prefix-[slug]+.vue']))).toThrow('only supports repeatable parameters as their own segment')
     expect(() => toRou3(tree(['[slug]+/suffix.vue']))).toThrow('only supports repeatable parameters at the end of a route')
     expect(() => toRou3(tree(['prefix-[...slug].vue']))).toThrow('only supports catchall parameters as their own segment')
@@ -198,15 +207,24 @@ describe('rou3 support', () => {
     expect(toRou3(tree(['(group)[slug].vue']))[0].path).toEqual('/:slug')
   })
 
-  it('should use wildcard for dynamic tokens without a name', () => {
+  it('makes param names unique within a pattern', () => {
+    const pattern = toRou3(tree(['[id]/[id]/[id_1].vue']))[0].path
+    const router = createRouter<{ value: string }>()
+    addRoute(router, 'GET', pattern, { value: pattern })
+
+    expect(pattern).toBe('/:id/:id_1/:id_1_1')
+    expect(findRoute(router, 'GET', '/a/b/c')?.params).toEqual({ id: 'a', id_1: 'b', id_1_1: 'c' })
+  })
+
+  it('should name dynamic tokens without a name', () => {
     const t = buildTree([{
       file: 'unnamed.vue',
       segments: [[{ type: 'dynamic', value: '' }]],
     }] as any)
-    expect(toRou3(t)[0].path).toEqual('/*')
+    expect(toRou3(t)[0].path).toEqual('/:_')
   })
 
-  it('should use wildcard for unnamed dynamic tokens inside a single segment', () => {
+  it('should name unnamed dynamic tokens inside a single segment', () => {
     const t = buildTree([{
       file: 'unnamed.vue',
       segments: [[
@@ -219,20 +237,20 @@ describe('rou3 support', () => {
     const pattern = toRou3(t)[0].path
     addRoute(router, 'GET', pattern, { value: pattern })
 
-    expect(pattern).toEqual('/file-*.png')
-    expect(findRoute(router, 'GET', '/file-icon.png')?.params).toEqual({ 0: 'icon' })
+    expect(pattern).toEqual('/file-:_.png')
+    expect(findRoute(router, 'GET', '/file-icon.png')?.params).toEqual({ _: 'icon' })
     expect(findRoute(router, 'GET', '/file-icon/svg.png')).toBeUndefined()
   })
 
-  it('should use wildcard for optional tokens without a name', () => {
+  it('should name optional tokens without a name', () => {
     const t = buildTree([{
       file: 'unnamed.vue',
       segments: [[{ type: 'optional', value: '' }]],
     }] as any)
-    expect(toRou3(t)[0].path).toEqual('/*')
+    expect(toRou3(t)[0].path).toEqual('/:_?')
   })
 
-  it('should use wildcard for repeatable tokens without a name', () => {
+  it('should name repeatable tokens without a name', () => {
     const t = buildTree([{
       file: 'unnamed.vue',
       segments: [[{ type: 'repeatable', value: '' }]],
@@ -241,25 +259,25 @@ describe('rou3 support', () => {
     const pattern = toRou3(t)[0].path
     addRoute(router, 'GET', pattern, { value: pattern })
 
-    expect(pattern).toEqual('/**:_')
+    expect(pattern).toEqual('/:_+')
     expect(findRoute(router, 'GET', '/')?.data.value).toBeUndefined()
     expect(findRoute(router, 'GET', '/file/here/we/go')?.params).toEqual({ _: 'file/here/we/go' })
   })
 
-  it('should use double wildcard for catchall tokens without a name', () => {
+  it('should name catchall tokens without a name', () => {
     const t = buildTree([{
       file: 'unnamed.vue',
       segments: [[{ type: 'catchall', value: '' }]],
     }] as any)
-    expect(toRou3(t)[0].path).toEqual('/**')
+    expect(toRou3(t)[0].path).toEqual('/:_*')
   })
 
-  it('should use double wildcard for optional-repeatable tokens without a name', () => {
+  it('should name optional-repeatable tokens without a name', () => {
     const t = buildTree([{
       file: 'unnamed.vue',
       segments: [[{ type: 'optional-repeatable', value: '' }]],
     }] as any)
-    expect(toRou3(t)[0].path).toEqual('/**')
+    expect(toRou3(t)[0].path).toEqual('/:_*')
   })
 
   it('should handle empty segments', () => {
@@ -307,7 +325,7 @@ describe('vueRouterToRou3', () => {
   it('maps param modifiers to rou3 equivalents', () => {
     expect(patterns('/:id?')).toEqual(['/:id?'])
     expect(patterns('/:slug+')).toEqual(['/:slug+'])
-    expect(patterns('/:pathMatch(.*)*')).toEqual(['/:pathMatch*'])
+    expect(patterns('/:pathMatch(.*)*')).toEqual(['/:pathMatch(.*)'])
   })
 
   it('preserves non-enumerable custom regexps as rou3 constraints', () => {
@@ -336,16 +354,18 @@ describe('vueRouterToRou3', () => {
     expect(patterns('/foo\\')).toEqual(['/foo\\\\'])
   })
 
-  it('collapses bare whole-segment params to single-segment wildcards', () => {
-    expect(patterns('/products/:id', { collapse: true })).toEqual(['/products/*'])
-    expect(patterns('/products/:id/edit', { collapse: true })).toEqual(['/products/*/edit'])
-    expect(patterns('/:a/:b', { collapse: true })).toEqual(['/*/*'])
-    expect(patterns('/blog/:a/:b', { collapse: true })).toEqual(['/blog/*/*'])
-    expect(patterns('/foo/:id?', { collapse: true })).toEqual(['/foo/*'])
-    expect(patterns('/foo/:id?/', { collapse: true })).toEqual(['/foo/*/'])
-    expect(patterns('/foo/:id?/bar', { collapse: true })).toEqual(['/foo/bar', '/foo/*/bar'])
-    expect(patterns('/foo/:a?/:b?/bar', { collapse: true })).toEqual(['/foo/bar', '/foo/*/bar', '/foo/*/bar', '/foo/*/*/bar'])
-    expect(patterns('/foo/:id?/bar', { collapse: true, maxExpansions: 1 })).toEqual(['/foo/**'])
+  it('collapses bare whole-segment params to positional single-segment params', () => {
+    expect(patterns('/products/:id', { collapse: true })).toEqual(['/products/:_0'])
+    expect(patterns('/products/:id()', { collapse: true })).toEqual(['/products/:_0'])
+    expect(patterns('/products/:id/edit', { collapse: true })).toEqual(['/products/:_0/edit'])
+    expect(patterns('/:a/:b', { collapse: true })).toEqual(['/:_0/:_1'])
+    expect(patterns('/:id/:id', { collapse: true })).toEqual(['/:_0/:_1'])
+    expect(patterns('/blog/:a/:b', { collapse: true })).toEqual(['/blog/:_0/:_1'])
+    expect(patterns('/blog/:slug?', { collapse: true })).toEqual(['/blog/:_0?'])
+    expect(patterns('/foo/:id?/', { collapse: true })).toEqual(['/foo/:_0?/'])
+    expect(patterns('/foo/:id?/bar', { collapse: true })).toEqual(['/foo/:_0?/bar'])
+    expect(patterns('/:a?/:b?', { collapse: true })).toEqual(['/:_0?/:_1?'])
+    expect(patterns('/foo/:a?/:b?/bar', { collapse: true, maxExpansions: 1 })).toEqual(['/foo/:_0?/:_1?/bar'])
     expect(patterns('/static/path', { collapse: true })).toEqual(['/static/path'])
     expect(patterns('/static/path/', { collapse: true })).toEqual(['/static/path/'])
     expect(patterns('/', { collapse: true })).toEqual(['/'])
@@ -357,12 +377,15 @@ describe('vueRouterToRou3', () => {
     expect(patterns('/article-:slug/edit', { collapse: true })).toEqual(['/**'])
     expect(patterns('/blog/:slug+', { collapse: true })).toEqual(['/blog/**'])
     expect(patterns('/blog/:slug*', { collapse: true })).toEqual(['/blog/**'])
-    expect(patterns('/:a/:id(\\d+)/edit', { collapse: true })).toEqual(['/*/**'])
+    expect(patterns('/:a/:id(\\d+)/edit', { collapse: true })).toEqual(['/:_0/**'])
+    expect(patterns('/:a/:rest(.*)*', { collapse: true })).toEqual(['/:_0/**'])
+    expect(patterns('/:a/:b?/:rest(.*)*', { collapse: true })).toEqual(['/:_0/**'])
+    expect(patterns('/:id?/:id(\\d+)', { collapse: true })).toEqual(['/**'])
   })
 
   it('expands enumerable params before collapsing', () => {
     expect(patterns('/:locale(de|fr)/account', { collapse: true })).toEqual(['/de/account', '/fr/account'])
-    expect(patterns('/:locale(de|fr)/account/:id', { collapse: true })).toEqual(['/de/account/*', '/fr/account/*'])
+    expect(patterns('/:locale(de|fr)/account/:id', { collapse: true })).toEqual(['/de/account/:_0', '/fr/account/:_0'])
     expect(patterns('/:locale(de|fr)/account', { collapse: true, expand: false })).toEqual(['/**'])
     expect(patterns('/:a(a|b|c)/:b', { collapse: true, maxExpansions: 2 })).toEqual(['/**'])
   })
@@ -415,6 +438,181 @@ describe('vueRouterToRou3', () => {
       '/b-c-:c(e|f)',
       '/b-d-:c(e|f)',
     ])
+  })
+
+  it('emits unique, valid rou3 param names', () => {
+    expect(patterns('/:id/:id')).toEqual(['/:id/:id_1'])
+    expect(patterns('/:id?/:id(\\d+)')).toEqual(['/:id?/:id_1(\\d+)'])
+    expect(patterns('/:a$b/:1st')).toEqual(['/:ab/:_1st'])
+    expect(patterns('/:slug()abc')).toEqual(['/:slug\\abc'])
+    expect(patterns('/:a:b(x|y)')).toEqual(['/:a\\x', '/:a\\y'])
+    expect(patterns('/:a-:b')).toEqual(['/:a-:b'])
+  })
+
+  it('wraps optional params sharing their segment in a group', () => {
+    expect(patterns('/a/:x?-suffix')).toEqual(['/a/{:x}?-suffix'])
+    expect(patterns('/a/pre-:x?')).toEqual(['/a/pre-{:x}?'])
+    expect(patterns('/a/pre-:x(\\d+)?-s')).toEqual(['/a/pre-{:x(\\d+)}?-s'])
+    expect(patterns('/a/:x?')).toEqual(['/a/:x?'])
+  })
+
+  it('escapes rou3 syntax in static text', () => {
+    expect(patterns('/a+b/c*d/e{f}')).toEqual(['/a\\+b/c\\*d/e\\{f\\}'])
+  })
+
+  it('emits `(.*)` params as rou3 catch-alls', () => {
+    expect(patterns('/:path(.*)')).toEqual(['/:path(.*)'])
+    expect(patterns('/:path(.*)?')).toEqual(['/:path(.*)'])
+    expect(patterns('/:path(.*)+')).toEqual(['/:path(.*)'])
+    expect(patterns('/pre-:path(.*)')).toEqual(['/pre-:path(.*)'])
+    expect(patterns('/pre-:path(.*)*')).toEqual(['/pre-:path(.*)'])
+    expect(patterns('/:path(.*)/edit')).toEqual(['/:path(.*)/edit'])
+  })
+
+  it('collapses catch-alls rou3 cannot represent', () => {
+    const result = (path: string) => {
+      const { patterns, issues } = vueRouterToRou3(path)
+      return { patterns, issues: issues.map(issue => issue.type) }
+    }
+    expect(result('/a/:x+/b/:y+')).toEqual({ patterns: ['/a/**'], issues: ['collapsed'] })
+    expect(result('/:x(.*)/:y*')).toEqual({ patterns: ['/**'], issues: ['collapsed'] })
+    expect(result('/:x(.*)-:y(.*)')).toEqual({ patterns: ['/**'], issues: ['collapsed'] })
+    expect(result('/a/pre-:x+')).toEqual({ patterns: ['/a/**'], issues: ['collapsed'] })
+    expect(result('/:a(de|fr)/pre-:x*')).toEqual({ patterns: ['/de/**', '/fr/**'], issues: ['collapsed'] })
+  })
+
+  it('drops constraints rou3 cannot represent', () => {
+    const result = (path: string) => {
+      const { patterns, issues } = vueRouterToRou3(path)
+      return { patterns, issues: issues.map(issue => issue.type) }
+    }
+    expect(result('/:x([$^-]\\d+)')).toEqual({ patterns: ['/:x([$^-]\\d+)'], issues: [] })
+    expect(result('/:x([a\\]-]+)')).toEqual({ patterns: ['/:x([a\\]-]+)'], issues: [] })
+    for (const path of ['/:x(^a)', '/:x(a$)', '/:x((?!admin)\\w+)', '/:x((?:a))', '/:x(a\\1)', '/:x(\\k<n>)', '/:x([a--b])', '/:x([a&&b])'])
+      expect(result(path), path).toEqual({ patterns: ['/:x'], issues: ['dropped-regexp'] })
+  })
+
+  describe('rou3 compatibility', () => {
+    const vueRouterPaths = [
+      '/',
+      '/about',
+      '/static/path/',
+      '/products/:id',
+      '/products/:id()/edit',
+      '/users/:id(\\d+)',
+      '/users/:id(\\d+)?',
+      '/:slug',
+      '/blog/:slug?',
+      '/:a/:b',
+      '/:a?/:b?',
+      '/foo/:a?/:b?/bar',
+      '/:id?/:id(\\d+)',
+      '/:a/:rest(.*)*',
+      '/:pathMatch(.*)*',
+      '/docs/:slug(.*)*',
+      '/files/:path+',
+      '/files/:path+/raw',
+      '/files/:path*/raw',
+      '/a/:x+/b/:y+',
+      '/article-:slug/edit',
+      '/article-:slug()-draft',
+      '/opt/:x?-suffix',
+      '/opt/pre-:x?',
+      '/:locale(de|fr)?/account/:id',
+      '/:a-:b',
+      '/:slug()abc',
+      '/repeat/:id(\\d+)+',
+      '/:x([a-c]+$)',
+    ]
+    const samplePaths = [
+      '/',
+      '/about',
+      '/static/path',
+      '/static/path/',
+      '/products/1',
+      '/products/1/edit',
+      '/products//edit',
+      '/users/1',
+      '/users/a',
+      '/users',
+      '/foo/bar',
+      '/foo/1/bar',
+      '/foo/1/2/bar',
+      '/foo/1/2/3/bar',
+      '/foo//bar',
+      '/blog',
+      '/blog/a',
+      '/blog/a/b',
+      '/docs',
+      '/docs/a/b',
+      '/files',
+      '/files/a',
+      '/files/a/b',
+      '/files/a/b/raw',
+      '/files/raw',
+      '/a/1/b/2',
+      '/a/1/2/b/3/4',
+      '/article-x/edit',
+      '/article-x-draft',
+      '/opt',
+      '/opt/-suffix',
+      '/opt/b-suffix',
+      '/opt/pre-',
+      '/opt/pre-b',
+      '/de/account/1',
+      '/account/1',
+      '/es/account/1',
+      '/x-y',
+      '/xabc',
+      '/repeat/1/2',
+      '/ac',
+      '/admin',
+      '/a/b/c/d',
+    ]
+
+    function vueRouterMatches(path: string, url: string): boolean {
+      const router = createVueRouter({
+        history: createMemoryHistory(),
+        routes: [{ path, component: () => ({}) }],
+        sensitive: true,
+      })
+      return router.resolve(url).matched.length > 0
+    }
+
+    for (const options of [{}, { collapse: true }]) {
+      it(`${options.collapse ? 'collapsed' : 'faithful'} patterns are valid rou3 routes matching what Vue Router matches, or more when an issue is reported`, () => {
+        for (const path of vueRouterPaths) {
+          const { patterns, issues } = vueRouterToRou3(path, options)
+          const router = createRouter()
+          for (const pattern of patterns)
+            expect(() => addRoute(router, 'GET', pattern, pattern), `${path} -> ${pattern}`).not.toThrow()
+
+          for (const url of samplePaths) {
+            const expected = vueRouterMatches(path, url)
+            const actual = !!findRoute(router, 'GET', url)
+            if (issues.length)
+              expect(actual || !expected, `${path} -> ${patterns.join(', ')} should match ${url}`).toBe(true)
+            else
+              expect(actual, `${path} -> ${patterns.join(', ')} on ${url}`).toBe(expected)
+          }
+        }
+      })
+    }
+
+    it('accepts every page route emitted by toVueRouter4', () => {
+      const files = ['index.vue', '[id].vue', 'users/[[id]].vue', 'users/[id]/edit.vue', '[...slug].vue', 'docs/[...slug]/edit.vue', '[[locale]]/[id].vue', 'prefix-[slug]-suffix.vue', 'repeat/[slug]+.vue', 'optional-repeat/[[slug]]+.vue', 'opt/pre-[[opt]].vue', 'opt/[[opt]]-post.vue', '[a]-[b].vue', '[b2]_[2b].vue', '[slug]abc.vue', 'dup/[id]/[id].vue']
+      const collect = (routes: ReturnType<typeof toVueRouter4>, prefix = ''): string[] => routes.flatMap((route) => {
+        const path = route.path.startsWith('/') ? route.path : `${prefix}/${route.path}`
+        return [path, ...collect(route.children, path)]
+      })
+      for (const path of collect(toVueRouter4(tree(files)))) {
+        for (const options of [{}, { collapse: true }]) {
+          const router = createRouter()
+          for (const pattern of vueRouterToRou3(path, options).patterns)
+            expect(() => addRoute(router, 'GET', pattern, pattern), `${path} -> ${pattern}`).not.toThrow()
+        }
+      }
+    })
   })
 })
 

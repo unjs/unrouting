@@ -285,45 +285,41 @@ export function toVueRouter4<const Attrs extends Record<string, string[]> = neve
 
 export function toRou3(tree: RouteTree): Rou3Route[] {
   return flattenTree(tree).map((info) => {
+    const paramName = createRou3ParamNames()
     let path = '/'
     for (let segmentIndex = 0; segmentIndex < info.segments.length; segmentIndex++) {
       const segment = info.segments[segmentIndex]
-      const hasPatternToken = segment.some(token => token.type !== 'group' && token.type !== 'static')
       let part = ''
       for (const token of segment) {
+        if (token.type === 'group')
+          continue
+        if (token.type === 'static') {
+          part = appendRou3(part, toRou3Static(token.value))
+          continue
+        }
+        const name = paramName(token.value)
         switch (token.type) {
-          case 'group':
-            break
-          case 'static': {
-            part += hasPatternToken ? toRou3RegexStaticSegment(token.value) : toRou3StaticSegment(token.value)
-            break
-          }
           case 'dynamic': {
-            part += token.value ? `:${sanitizeRou3Param(token.value)}` : '*'
+            part += `:${name}`
             break
           }
           case 'optional': {
-            part += token.value
-              ? isOwnRou3PathSegment(segment)
-                ? `:${sanitizeRou3Param(token.value)}?`
-                : `:${sanitizeRou3Param(token.value)}(.*)`
-              : '*'
+            part += isOwnRou3PathSegment(segment) ? `:${name}?` : `:${name}([^\\x2f]*)`
             break
           }
           case 'catchall': {
             assertTerminalRou3Repeatable(info.segments, segmentIndex, segment, 'catchall')
-            // `[...slug]` is zero-or-more; rou3's named `**:slug` does not match an empty tail.
-            part += token.value ? `:${sanitizeRou3Param(token.value)}*` : '**'
+            part += `:${name}*`
             break
           }
           case 'repeatable': {
             assertTerminalRou3Repeatable(info.segments, segmentIndex, segment, 'repeatable')
-            part += token.value ? `:${sanitizeRou3Param(token.value)}+` : '**:_'
+            part += `:${name}+`
             break
           }
           case 'optional-repeatable': {
             assertTerminalRou3Repeatable(info.segments, segmentIndex, segment, 'optional repeatable')
-            part += token.value ? `:${sanitizeRou3Param(token.value)}*` : '**'
+            part += `:${name}*`
             break
           }
         }
@@ -335,41 +331,34 @@ export function toRou3(tree: RouteTree): Rou3Route[] {
   })
 }
 
-function sanitizeRou3Param(value: string): string {
-  const sanitized = value.replace(/\./g, '')
-  return sanitized.replace(/^(\d)/, '_$1') || '_'
+const ROU3_PARAM_NAME_INVALID_RE = /\W/g
+const LEADING_DIGIT_RE = /^(\d)/
+
+/** Allocate rou3 param names (`[A-Za-z_]\w*`) that are unique within one pattern. */
+function createRou3ParamNames(): (value: string) => string {
+  const used = new Set<string>()
+  return (value) => {
+    const base = value.replace(ROU3_PARAM_NAME_INVALID_RE, '').replace(LEADING_DIGIT_RE, '_$1') || '_'
+    let name = base
+    for (let i = 1; used.has(name); i++)
+      name = `${base}_${i}`
+    used.add(name)
+    return name
+  }
 }
 
-const ROU3_STATIC_SEGMENT_ESCAPE_RE = /[:(){}\\]/g
+const ROU3_STATIC_ESCAPE_RE = /[:(){}\\*?+]/g
 
-function toRou3StaticSegment(segment: string): string {
-  if (segment.includes('*')) {
-    if (segment === '*')
-      return '\\*'
-    if (segment === '**')
-      return '\\*\\*'
-    throw new TypeError(`[unrouting] \`toRou3\` cannot represent static segment "${segment}" because rou3 treats \`*\` as a wildcard`)
-  }
-
-  return segment.replace(ROU3_STATIC_SEGMENT_ESCAPE_RE, char => `\\${char}`)
+function toRou3Static(text: string): string {
+  return text.replace(ROU3_STATIC_ESCAPE_RE, char => `\\${char}`)
 }
 
-const ROU3_REGEX_STATIC_SAFE_CHAR_RE = /^[\w.-]$/
+const TRAILING_PARAM_NAME_RE = /:\w+$/
+const LEADING_WORD_CHAR_RE = /^\w/
 
-function toRou3RegexStaticSegment(segment: string): string {
-  let result = ''
-  for (const char of segment) {
-    if (ROU3_REGEX_STATIC_SAFE_CHAR_RE.test(char)) {
-      result += char
-    }
-    else if (char.charCodeAt(0) <= 0x7F) {
-      result += `(?:\\x${char.charCodeAt(0).toString(16).padStart(2, '0').toUpperCase()})`
-    }
-    else {
-      result += escapeStringRegexp(char)
-    }
-  }
-  return result
+/** Append to a rou3 pattern, escaping a leading word char that would otherwise extend a preceding `:name`. */
+function appendRou3(prefix: string, text: string): string {
+  return prefix + (LEADING_WORD_CHAR_RE.test(text) && TRAILING_PARAM_NAME_RE.test(prefix) ? `\\${text}` : text)
 }
 
 function assertTerminalRou3Repeatable(segments: ParsedPathSegment[], segmentIndex: number, segment: ParsedPathSegment, type: string): void {
@@ -412,18 +401,19 @@ export interface VueRouterToRou3Options {
   maxExpansions?: number
 
   /**
-   * Collapse each resulting path into a glob using only `*` and `**`
-   * wildcards. A bare whole-segment param (`:id`) becomes a single-segment
-   * `*` wildcard, which rou3 matches exactly, so `/products/:id` becomes
-   * `['/products/*']` and later segments stay intact. A bare optional param
-   * (`:id?`) becomes a trailing `*` (optional in rou3) or, mid-path, expands
-   * into both variants (with and without the segment). Anything rou3's
-   * wildcards cannot represent exactly (a regexp constraint, a partial
-   * segment like `prefix-:id`, a repeatable param) collapses into a `**` catch-all from that segment onwards, e.g.
-   * `/users/:id(\d+)/edit` becomes `['/users/**']`. Enumerable params are
-   * still expanded first (subject to `expand`), so `/:locale(en|nl)/account`
-   * becomes `['/en/account', '/nl/account']`. Useful for deriving route-rule
-   * keys or region prefixes rather than faithful matchers.
+   * Collapse each resulting path into a canonical pattern built only from
+   * static segments, positionally named single-segment params (`:_0`, `:_1`,
+   * ...) and at most one trailing `**` catch-all. A bare whole-segment param
+   * becomes a single-segment param regardless of its original name, so
+   * `/products/:id/edit` becomes `['/products/:_0/edit']`, and a bare
+   * optional param keeps its `?` (`/foo/:id?/bar` becomes
+   * `['/foo/:_0?/bar']`). Anything else (a regexp constraint, a partial
+   * segment like `prefix-:id`, a repeatable param) collapses into a `**`
+   * catch-all from that segment onwards, e.g. `/users/:id(\d+)/edit` becomes
+   * `['/users/**']`. Enumerable params are still expanded first (subject to
+   * `expand`), so `/:locale(en|nl)/account` becomes
+   * `['/en/account', '/nl/account']`. Useful for deriving route-rule keys or
+   * region prefixes rather than faithful matchers.
    *
    * @default false
    */
@@ -446,10 +436,9 @@ export interface VueRouterToRou3Issue {
   /**
    * - `collapsed`: the path (or its remainder) was replaced with a `**`
    *   catch-all, which also matches nested paths the original did not.
-   * - `dropped-regexp`: a param's custom regexp was dropped, either because
-   *   the param is repeatable (rou3 does not enforce constraints there) or
-   *   because the regexp contains `/` (rou3 splits patterns on slashes and
-   *   cannot represent it).
+   * - `dropped-regexp`: a param's custom regexp was dropped because rou3
+   *   cannot represent it: the param is repeatable, the regexp contains `/`,
+   *   or it uses an anchor, backreference, group or class set operation.
    * - `max-expansions`: enumerating an alternation was abandoned because it
    *   would exceed `maxExpansions`; a dynamic param was emitted instead.
    */
@@ -466,11 +455,14 @@ interface VueRouterPathToken {
   /** Raw regexp source between the parentheses, if the param declared one. */
   regexp?: string
   modifier: '' | '?' | '+' | '*'
+  /** rou3 param name, unique within the path. */
+  name?: string
 }
 
 const VUE_ROUTER_PARAM_NAME_RE = /[\w$]/
 /** Alternation of URL-safe literals, e.g. `de|fr|en-GB`. */
 const ENUMERABLE_ALTERNATION_RE = /^[\w.~-]+(?:\|[\w.~-]+)*$/
+const TRAILING_COLLAPSED_OPTIONALS_RE = /(?:\/:_\d+\?)+$/
 
 /**
  * Convert a compiled Vue Router path string (e.g. from a route definition's
@@ -480,10 +472,11 @@ const ENUMERABLE_ALTERNATION_RE = /^[\w.~-]+(?:\|[\w.~-]+)*$/
  * paths, so `/:locale(de|fr)/account/verify` becomes
  * `['/de/account/verify', '/fr/account/verify']`. Other params degrade to
  * rou3 dynamic (`:id`), repeatable (`:id+`), optional (`:id?`) or catch-all
- * (`:id*` / `**`) segments. Custom regexps are preserved as rou3 param
- * constraints where rou3 enforces them (plain and optional params); they are
- * dropped on repeatable params (rou3 ignores them there) and when the regexp
- * contains `/` (rou3 cannot represent it).
+ * (`:id*` / `:id(.*)`) segments, with names made unique and valid for rou3.
+ * Custom regexps are preserved as rou3 param constraints on plain and optional
+ * params where rou3 can represent them. rou3 allows a single catch-all per
+ * route, filling its own segment when repeatable, so a path with more
+ * catch-alls collapses into a `**` from the first of them onwards.
  *
  * Any lossy or widening step taken along the way is recorded in `issues`, so
  * callers can surface risky conversions to their users.
@@ -507,35 +500,39 @@ export function vueRouterToRou3(path: string, options: VueRouterToRou3Options = 
   const report = (issue: VueRouterToRou3Issue) => issues.push(issue)
 
   const trailingSlash = path.length > 1 && path.endsWith('/')
-  const rawSegments = splitVueRouterSegments(path)
-
-  const lastSegmentIndex = rawSegments.length - 1 - (trailingSlash ? 1 : 0)
+  const paramName = createRou3ParamNames()
+  const segments = splitVueRouterSegments(path).filter(Boolean).map((raw) => {
+    const tokens = parseVueRouterSegment(raw)
+    for (const token of tokens) {
+      if (token.type === 'param')
+        token.name = paramName(token.value)
+    }
+    return { raw, tokens }
+  })
+  const catchAllConflictAt = collapse ? -1 : findRou3CatchAllConflict(segments.map(segment => segment.tokens))
 
   let variants: string[] = ['']
-  for (const [segmentIndex, rawSegment] of rawSegments.entries()) {
-    if (rawSegment === '')
-      continue
+  let collapsedParams = 0
+  for (const [segmentIndex, { raw: rawSegment, tokens }] of segments.entries()) {
+    if (segmentIndex === catchAllConflictAt) {
+      report({
+        type: 'collapsed',
+        message: `Collapsed "${path}" at segment "${rawSegment}" into a \`**\` catch-all because rou3 supports only one catch-all per route, filling its own segment when repeatable`,
+      })
+      return { patterns: variants.map(prefix => `${prefix}/**`), issues }
+    }
 
     // In collapse mode token-level issues are irrelevant: any segment that
     // could produce one is dynamic and gets replaced by `**` wholesale.
-    const alternatives = vueRouterSegmentToRou3(rawSegment, expand, maxExpansions, collapse ? undefined : report)
+    const alternatives = vueRouterSegmentToRou3(rawSegment, tokens, expand, maxExpansions, collapse ? undefined : report)
     const overflows = variants.length * alternatives.length > maxExpansions
 
     if (collapse && (overflows || alternatives.some(alternative => !isStaticRou3Segment(alternative)))) {
-      const tokens = parseVueRouterSegment(rawSegment)
       const only = tokens.length === 1 ? tokens[0]! : undefined
-      // A bare whole-segment param maps exactly to rou3's single-segment `*`
-      // wildcard. rou3's `*` is only optional in trailing position, so a `?`
-      // param emits both variants (segment absent and present) instead.
       if (only?.type === 'param' && !only.regexp && (only.modifier === '' || only.modifier === '?')) {
-        if (only.modifier === '' || segmentIndex === lastSegmentIndex) {
-          variants = variants.map(prefix => `${prefix}/*`)
-          continue
-        }
-        if (variants.length * 2 <= maxExpansions) {
-          variants = variants.flatMap(prefix => [prefix, `${prefix}/*`])
-          continue
-        }
+        const segment = `/:_${collapsedParams++}${only.modifier}`
+        variants = variants.map(prefix => prefix + segment)
+        continue
       }
       const params = tokens.filter(token => token.type === 'param')
       report({
@@ -543,11 +540,12 @@ export function vueRouterToRou3(path: string, options: VueRouterToRou3Options = 
         param: params.length === 1 ? params[0]!.value : undefined,
         message: `Collapsed "${path}" at segment "${rawSegment}" into a \`**\` catch-all, which also matches nested paths`,
       })
-      return { patterns: variants.map(prefix => `${prefix}/**`), issues }
+      // `**` already matches zero segments, so optional params right before it are redundant.
+      return { patterns: variants.map(prefix => `${prefix.replace(TRAILING_COLLAPSED_OPTIONALS_RE, '')}/**`), issues }
     }
 
     if (overflows) {
-      const collapsed = vueRouterSegmentToRou3(rawSegment, false)[0]
+      const collapsed = vueRouterSegmentToRou3(rawSegment, tokens, false)[0]
       report({
         type: 'max-expansions',
         message: `Expanding segment "${rawSegment}" of "${path}" would exceed maxExpansions (${maxExpansions}); emitted "${collapsed}" instead`,
@@ -608,14 +606,35 @@ function splitVueRouterSegments(path: string): string[] {
   return segments
 }
 
-function vueRouterSegmentToRou3(segment: string, expand: boolean, maxExpansions = Number.POSITIVE_INFINITY, report?: (issue: VueRouterToRou3Issue) => void): string[] {
-  const tokens = parseVueRouterSegment(segment)
+/**
+ * Index of the segment from which a path has to collapse into `**` because
+ * rou3 cannot represent its catch-alls (a second one, or a repeatable param
+ * sharing its segment), or `-1`.
+ */
+function findRou3CatchAllConflict(segments: VueRouterPathToken[][]): number {
+  let first = -1
+  for (const [index, tokens] of segments.entries()) {
+    for (const token of tokens) {
+      const star = token.regexp === '.*'
+      if (!star && token.modifier !== '+' && token.modifier !== '*')
+        continue
+      if (first !== -1)
+        return first
+      if (!star && tokens.length > 1)
+        return index
+      first = index
+    }
+  }
+  return -1
+}
 
+function vueRouterSegmentToRou3(segment: string, tokens: VueRouterPathToken[], expand: boolean, maxExpansions = Number.POSITIVE_INFINITY, report?: (issue: VueRouterToRou3Issue) => void): string[] {
   let parts: string[] = ['']
   for (const token of tokens) {
-    let alternatives = vueRouterTokenToRou3(token, expand, report)
+    const sharesSegment = tokens.length > 1
+    let alternatives = vueRouterTokenToRou3(token, sharesSegment, expand, report)
     if (parts.length * alternatives.length > maxExpansions) {
-      alternatives = vueRouterTokenToRou3(token, false)
+      alternatives = vueRouterTokenToRou3(token, sharesSegment, false)
       report?.({
         type: 'max-expansions',
         param: token.value,
@@ -625,22 +644,26 @@ function vueRouterSegmentToRou3(segment: string, expand: boolean, maxExpansions 
     const next: string[] = []
     for (const prefix of parts) {
       for (const alternative of alternatives)
-        next.push(prefix + alternative)
+        next.push(appendRou3(prefix, alternative))
     }
     parts = next
   }
   return parts
 }
 
-function vueRouterTokenToRou3(token: VueRouterPathToken, expand: boolean, report?: (issue: VueRouterToRou3Issue) => void): string[] {
+function vueRouterTokenToRou3(token: VueRouterPathToken, sharesSegment: boolean, expand: boolean, report?: (issue: VueRouterToRou3Issue) => void): string[] {
   if (token.type === 'static')
-    return [toRou3StaticSegment(token.value)]
+    return [toRou3Static(token.value)]
 
-  if (token.regexp && token.regexp !== '.*' && (token.modifier === '+' || token.modifier === '*')) {
+  // rou3 treats `(.*)` as a catch-all that takes no modifier and also matches empty segments.
+  if (token.regexp === '.*')
+    return [`:${token.name}(.*)`]
+
+  if (token.regexp && (token.modifier === '+' || token.modifier === '*')) {
     report?.({
       type: 'dropped-regexp',
       param: token.value,
-      message: `Dropped custom regexp "(${token.regexp})" on repeatable param ":${token.value}${token.modifier}" because rou3 does not enforce constraints on repeatable params`,
+      message: `Dropped custom regexp "(${token.regexp})" on repeatable param ":${token.value}${token.modifier}" because rou3 does not support constraints on repeatable params`,
     })
   }
 
@@ -654,11 +677,7 @@ function vueRouterTokenToRou3(token: VueRouterPathToken, expand: boolean, report
     return token.modifier === '?' ? ['', ...branches] : branches
   }
 
-  const name = sanitizeRou3Param(token.value)
-  // rou3 only enforces `(regexp)` constraints on plain and optional params;
-  // repeatable params silently ignore them, so no point emitting them there.
-  // Constraints containing `/` are dropped too: rou3 splits patterns on
-  // slashes before parsing params, producing an invalid regexp.
+  const name = token.name!
   let constraint = ''
   if (token.regexp && (token.modifier === '' || token.modifier === '?')) {
     if (token.regexp.includes('/')) {
@@ -668,13 +687,21 @@ function vueRouterTokenToRou3(token: VueRouterPathToken, expand: boolean, report
         message: `Dropped custom regexp "(${token.regexp})" on param ":${token.value}" because rou3 cannot represent constraints containing "/"`,
       })
     }
+    else if (!isRou3Constraint(token.regexp)) {
+      report?.({
+        type: 'dropped-regexp',
+        param: token.value,
+        message: `Dropped custom regexp "(${token.regexp})" on param ":${token.value}" because rou3 does not support anchors, backreferences, groups or class set operations in constraints`,
+      })
+    }
     else {
       constraint = `(${token.regexp})`
     }
   }
   switch (token.modifier) {
     case '?':
-      return [`:${name}${constraint}?`]
+      // rou3 only accepts `:name?` at the end of a segment.
+      return [sharesSegment ? `{:${name}${constraint}}?` : `:${name}${constraint}?`]
     case '+':
       return [`:${name}+`]
     case '*':
@@ -682,6 +709,36 @@ function vueRouterTokenToRou3(token: VueRouterPathToken, expand: boolean, report
     default:
       return [`:${name}${constraint}`]
   }
+}
+
+const BACKREFERENCE_RE = /[1-9k]/
+
+/**
+ * `false` for a param regexp rou3 rejects as a constraint: one with an anchor,
+ * a backreference, a group or a `--` / `&&` in a class.
+ */
+function isRou3Constraint(regexp: string): boolean {
+  for (let i = 0; i < regexp.length; i++) {
+    const char = regexp[i]!
+    if (char === '\\') {
+      if (BACKREFERENCE_RE.test(regexp.charAt(++i)))
+        return false
+    }
+    else if (char === '[') {
+      const start = i
+      while (++i < regexp.length && regexp[i] !== ']') {
+        if (regexp[i] === '\\')
+          i++
+      }
+      const set = regexp.slice(start, i)
+      if (set.includes('--') || set.includes('&&'))
+        return false
+    }
+    else if (char === '^' || char === '$' || char === '(') {
+      return false
+    }
+  }
+  return true
 }
 
 function parseVueRouterSegment(segment: string): VueRouterPathToken[] {

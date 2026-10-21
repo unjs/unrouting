@@ -1,3 +1,4 @@
+import { addRoute, createRouter, findRoute } from 'rou3'
 import { describe, expect, it } from 'vitest'
 import { rou3PatternToURLPattern } from '../../src'
 
@@ -41,9 +42,11 @@ describe('rou3PatternToURLPattern', () => {
     expect(convert('/users/:id(unterminated')).toBe('/users/:id(unterminated')
   })
 
-  it('translates single-segment wildcards', () => {
-    expect(convert('/files/*')).toBe('/files/([^/]*)')
-    expect(convert('/files/*.png')).toBe('/files/([^/]*).png')
+  it('passes greedy wildcards through unchanged', () => {
+    expect(convert('/files/*')).toBe('/files/*')
+    expect(convert('/files/*.png')).toBe('/files/*.png')
+    expect(convert('/files/(.*)')).toBe('/files/(.*)')
+    expect(convert('/files/:path(.*)')).toBe('/files/:path(.*)')
   })
 
   it('translates catch-alls to URLPattern greedy wildcard', () => {
@@ -52,7 +55,7 @@ describe('rou3PatternToURLPattern', () => {
   })
 
   it('handles a mix of segment kinds', () => {
-    expect(convert('/api/:v/users/*/**')).toBe('/api/:v/users/([^/]*)/*')
+    expect(convert('/api/:v/users/:id/**')).toBe('/api/:v/users/:id/*')
   })
 
   it('leaves escaped tokens as literals', () => {
@@ -68,6 +71,8 @@ describe('rou3PatternToURLPattern', () => {
     expect(convert('/files/*', 'loose')).toBe('/files/*')
     expect(convert('/blog/**:rest', 'loose')).toBe('/blog/*')
     expect(convert('/path/(\\d+)', 'loose')).toBe('/path/*')
+    expect(convert('/path/(.*)', 'loose')).toBe('/path/(.*)')
+    expect(convert('/path/:rest(.*)', 'loose')).toBe('/path/:rest(.*)')
   })
 
   it('matches the historical Nuxt inline conversion in loose mode', () => {
@@ -86,6 +91,9 @@ describe('rou3PatternToURLPattern', () => {
       expect(rou3PatternToURLPattern('/users/:id').issues).toEqual([])
       expect(rou3PatternToURLPattern('/users/:id(\\d+)').issues).toEqual([])
       expect(rou3PatternToURLPattern('/files/:path+').issues).toEqual([])
+      expect(rou3PatternToURLPattern('/files/*', { segment: 'loose' }).issues).toEqual([])
+      expect(rou3PatternToURLPattern('/files/:path(.*)', { segment: 'loose' }).issues).toEqual([])
+      expect(rou3PatternToURLPattern('/book{s}+').issues).toEqual([])
     })
 
     it('reports the widening of a named param in loose mode', () => {
@@ -93,21 +101,31 @@ describe('rou3PatternToURLPattern', () => {
       expect(issues).toMatchObject([{ type: 'widened', param: 'id' }])
     })
 
-    it('reports the widening of a single-segment wildcard in loose mode', () => {
-      const { issues } = rou3PatternToURLPattern('/files/*', { segment: 'loose' })
-      expect(issues).toMatchObject([{ type: 'widened' }])
-    })
-
     it('reports the widening of an unnamed group in loose mode', () => {
       const { pattern, issues } = rou3PatternToURLPattern('/path/(\\d+)', { segment: 'loose' })
       expect(pattern).toBe('/path/*')
       expect(issues).toMatchObject([{ type: 'widened' }])
     })
+  })
 
-    it('reports repeating groups whose cross-segment semantics differ', () => {
-      const { pattern, issues } = rou3PatternToURLPattern('/book{s}+')
-      expect(pattern).toBe('/book{s}+')
-      expect(issues).toMatchObject([{ type: 'widened' }])
-    })
+  it('matches the same paths as rou3', () => {
+    const cases: Record<string, string[]> = {
+      '/blog/*': ['/blog/a', '/blog/a/b', '/blog/', '/other'],
+      '/files/*.png': ['/files/a.png', '/files/a/b.png', '/files/a.jpg'],
+      '/users/:id': ['/users/1', '/users/1/2', '/users'],
+      '/users/:id?': ['/users', '/users/1', '/users/1/2'],
+      '/users/:id(\\d+)': ['/users/1', '/users/a'],
+      '/files/:path+': ['/files/a', '/files/a/b', '/files'],
+      '/docs/:path(.*)': ['/docs/a', '/docs/a/b'],
+      '/blog/**:rest': ['/blog/a', '/blog/a/b'],
+      '/:_0/edit': ['/a/edit', '/a/b/edit', '/edit'],
+    }
+    for (const [route, paths] of Object.entries(cases)) {
+      const router = createRouter()
+      addRoute(router, 'GET', route, route)
+      const urlPattern = new URLPattern({ pathname: convert(route) })
+      for (const path of paths)
+        expect(urlPattern.test({ pathname: path }), `${route} on ${path}`).toBe(!!findRoute(router, 'GET', path))
+    }
   })
 })
