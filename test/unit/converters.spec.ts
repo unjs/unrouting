@@ -1,4 +1,6 @@
+import { createRouter as createRadixRouter, toRouteMatcher } from 'radix3'
 import { addRoute, createRouter, findRoute } from 'rou3'
+import { addRoute as addRouteV0, createRouter as createRouterV0, findRoute as findRouteV0 } from 'rou3-v0'
 import { describe, expect, it } from 'vitest'
 import { createMemoryHistory, createRouter as createVueRouter } from 'vue-router'
 import { addFile, buildTree, compileParsePath, isPageNode, parsePath, parseSegment, removeFile, toRegExp, toRou3, toVueRouter4, toVueRouterPath, toVueRouterSegment, vueRouterToRou3, walkTree } from '../../src'
@@ -361,15 +363,50 @@ describe('vueRouterToRou3', () => {
     expect(patterns('/:a/:b', { collapse: true })).toEqual(['/:_0/:_1'])
     expect(patterns('/:id/:id', { collapse: true })).toEqual(['/:_0/:_1'])
     expect(patterns('/blog/:a/:b', { collapse: true })).toEqual(['/blog/:_0/:_1'])
-    expect(patterns('/blog/:slug?', { collapse: true })).toEqual(['/blog/:_0?'])
-    expect(patterns('/foo/:id?/', { collapse: true })).toEqual(['/foo/:_0?/'])
-    expect(patterns('/foo/:id?/bar', { collapse: true })).toEqual(['/foo/:_0?/bar'])
-    expect(patterns('/:a?/:b?', { collapse: true })).toEqual(['/:_0?/:_1?'])
-    expect(patterns('/foo/:a?/:b?/bar', { collapse: true, maxExpansions: 1 })).toEqual(['/foo/:_0?/:_1?/bar'])
     expect(patterns('/static/path', { collapse: true })).toEqual(['/static/path'])
     expect(patterns('/static/path/', { collapse: true })).toEqual(['/static/path/'])
     expect(patterns('/', { collapse: true })).toEqual(['/'])
     expect(patterns('/foo\\:bar', { collapse: true })).toEqual(['/foo\\:bar'])
+    expect(patterns('/\\:_/:id', { collapse: true })).toEqual(['/\\:_/:_0'])
+  })
+
+  it('expands bare optional params into both variants when collapsing', () => {
+    expect(patterns('/:id?', { collapse: true })).toEqual(['/', '/:_0'])
+    expect(patterns('/blog/:slug?', { collapse: true })).toEqual(['/blog', '/blog/:_0'])
+    expect(patterns('/foo/:id?/', { collapse: true })).toEqual(['/foo/', '/foo/:_0/'])
+    expect(patterns('/foo/:id?/bar', { collapse: true })).toEqual(['/foo/bar', '/foo/:_0/bar'])
+    expect(patterns('/:a?/:b?', { collapse: true })).toEqual(['/', '/:_0', '/:_0/:_1'])
+    expect(patterns('/:a/:b?/:c', { collapse: true })).toEqual(['/:_0/:_1', '/:_0/:_1/:_2'])
+    expect(patterns('/foo/:a?/:b?/bar', { collapse: true, maxExpansions: 2 })).toEqual(['/foo/**'])
+    expect(vueRouterToRou3('/foo/:a?/:b?/bar', { collapse: true, maxExpansions: 2 }).issues.map(issue => issue.type)).toEqual(['collapsed'])
+  })
+
+  it('emits collapsed patterns that match the same paths in rou3 1.x, rou3 0.x and radix3', () => {
+    const cases: Record<string, string[]> = {
+      '/products/:id': ['/products', '/products/1', '/products/1/2'],
+      '/products/:id/edit': ['/products/1/edit', '/products/1/x'],
+      '/foo/:id?': ['/foo', '/foo/1', '/foo/1/2'],
+      '/foo/:id?/bar': ['/foo/bar', '/foo/1/bar', '/foo/1/2/bar'],
+      '/:a/:b?/:c?': ['/1', '/1/2', '/1/2/3', '/1/2/3/4'],
+      '/:locale(de|fr)/account/:id': ['/de/account/1', '/en/account/1'],
+      '/users/:id(\\d+)/edit': ['/users', '/users/1/edit', '/users/x/y'],
+      '/blog/:slug(.*)*': ['/blog', '/blog/a/b'],
+    }
+    for (const [path, urls] of Object.entries(cases)) {
+      const { patterns } = vueRouterToRou3(path, { collapse: true })
+      const router = createRouter()
+      const routerV0 = createRouterV0()
+      for (const pattern of patterns) {
+        addRoute(router, 'GET', pattern, pattern)
+        addRouteV0(routerV0, 'GET', pattern, pattern)
+      }
+      const radix = toRouteMatcher(createRadixRouter({ routes: Object.fromEntries(patterns.map(pattern => [pattern, {}])) }))
+      for (const url of urls) {
+        const expected = !!findRoute(router, 'GET', url)
+        expect(!!findRouteV0(routerV0, 'GET', url), `${path} on ${url} (rou3 0.x)`).toBe(expected)
+        expect(radix.matchAll(url).length > 0, `${path} on ${url} (radix3)`).toBe(expected)
+      }
+    }
   })
 
   it('collapses to catch-all globs from the first lossy segment', () => {

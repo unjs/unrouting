@@ -5,6 +5,8 @@
  * `:name(regex)`, `:name?`, `:name+`, `:name*`, `*`, `(regex)`, `{...}`) mean
  * the same thing in both and are passed through unchanged. Only rou3's `**`
  * (and `**:name`) catch-all has no URLPattern equivalent and becomes `*`.
+ * Patterns written for rou3 0.x or radix3, where `*` matches a single
+ * segment, need `wildcard: 'segment'`.
  *
  * The resulting strings are URLPattern pathname patterns, so they can be
  * dropped straight into a Speculation Rules `href_matches` rule or passed to
@@ -35,6 +37,17 @@ export interface Rou3PatternToURLPatternOptions {
    *   patterns.
    */
   segment?: 'strict' | 'loose'
+
+  /**
+   * What a bare `*` in the input matches.
+   *
+   * - `'rest'` (default): the rest of the path, `/` included, as in rou3 1.x.
+   *   It is passed through unchanged.
+   * - `'segment'`: a single segment, as in rou3 0.x and radix3 (Nitro v2).
+   *   It becomes `([^\/]*)`, or `*` with a `widened` issue under
+   *   `segment: 'loose'`.
+   */
+  wildcard?: 'rest' | 'segment'
 }
 
 export interface Rou3PatternToURLPatternResult {
@@ -65,8 +78,16 @@ export function rou3PatternToURLPattern(
   options?: Rou3PatternToURLPatternOptions,
 ): Rou3PatternToURLPatternResult {
   const issues: Rou3ToURLPatternIssue[] = []
-  const converted = convert(pattern, options?.segment === 'loose', issue => issues.push(issue))
+  const converted = convert(pattern, {
+    loose: options?.segment === 'loose',
+    segmentWildcard: options?.wildcard === 'segment',
+  }, issue => issues.push(issue))
   return { pattern: converted, issues }
+}
+
+interface ConvertOptions {
+  loose: boolean
+  segmentWildcard: boolean
 }
 
 const WORD_RE = /\w/
@@ -76,16 +97,16 @@ function isModifier(char: string | undefined): boolean {
   return char === '?' || char === '+' || char === '*'
 }
 
-function convert(pattern: string, loose: boolean, report: (issue: Rou3ToURLPatternIssue) => void): string {
+function convert(pattern: string, options: ConvertOptions, report: (issue: Rou3ToURLPatternIssue) => void): string {
   return splitRou3Segments(pattern)
-    .map(segment => convertSegment(segment, pattern, loose, report))
+    .map(segment => convertSegment(segment, pattern, options, report))
     .join('/')
 }
 
 function convertSegment(
   segment: string,
   pattern: string,
-  loose: boolean,
+  { loose, segmentWildcard }: ConvertOptions,
   report: (issue: Rou3ToURLPatternIssue) => void,
 ): string {
   let out = ''
@@ -107,6 +128,13 @@ function convertSegment(
           i++
           while (i < segment.length && WORD_RE.test(segment[i])) i++
         }
+      }
+      else if (segmentWildcard && !loose) {
+        out += '([^\\/]*)'
+        continue
+      }
+      else if (segmentWildcard) {
+        report({ type: 'widened', message: `Widened \`*\` in "${pattern}" to \`*\`, which matches across \`/\`` })
       }
       out += '*'
       continue

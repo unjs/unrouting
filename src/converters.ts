@@ -406,14 +406,17 @@ export interface VueRouterToRou3Options {
    * ...) and at most one trailing `**` catch-all. A bare whole-segment param
    * becomes a single-segment param regardless of its original name, so
    * `/products/:id/edit` becomes `['/products/:_0/edit']`, and a bare
-   * optional param keeps its `?` (`/foo/:id?/bar` becomes
-   * `['/foo/:_0?/bar']`). Anything else (a regexp constraint, a partial
-   * segment like `prefix-:id`, a repeatable param) collapses into a `**`
+   * optional param expands into both variants (`/foo/:id?/bar` becomes
+   * `['/foo/bar', '/foo/:_0/bar']`). Anything else (a regexp constraint, a
+   * partial segment like `prefix-:id`, a repeatable param, or optional params
+   * whose variants would exceed `maxExpansions`) collapses into a `**`
    * catch-all from that segment onwards, e.g. `/users/:id(\d+)/edit` becomes
    * `['/users/**']`. Enumerable params are still expanded first (subject to
    * `expand`), so `/:locale(en|nl)/account` becomes
    * `['/en/account', '/nl/account']`. Useful for deriving route-rule keys or
-   * region prefixes rather than faithful matchers.
+   * region prefixes rather than faithful matchers. The output uses no
+   * wildcards or modifiers besides `**`, so it matches the same paths in
+   * rou3 0.x, rou3 1.x and radix3.
    *
    * @default false
    */
@@ -462,7 +465,7 @@ interface VueRouterPathToken {
 const VUE_ROUTER_PARAM_NAME_RE = /[\w$]/
 /** Alternation of URL-safe literals, e.g. `de|fr|en-GB`. */
 const ENUMERABLE_ALTERNATION_RE = /^[\w.~-]+(?:\|[\w.~-]+)*$/
-const TRAILING_COLLAPSED_OPTIONALS_RE = /(?:\/:_\d+\?)+$/
+const COLLAPSED_PARAM_RE = /(?<=\/):_(?=\/|$)/g
 
 /**
  * Convert a compiled Vue Router path string (e.g. from a route definition's
@@ -512,7 +515,8 @@ export function vueRouterToRou3(path: string, options: VueRouterToRou3Options = 
   const catchAllConflictAt = collapse ? -1 : findRou3CatchAllConflict(segments.map(segment => segment.tokens))
 
   let variants: string[] = ['']
-  let collapsedParams = 0
+  /** Variants before the trailing run of expanded optional params, if any. */
+  let beforeOptionals: string[] | undefined
   for (const [segmentIndex, { raw: rawSegment, tokens }] of segments.entries()) {
     if (segmentIndex === catchAllConflictAt) {
       report({
@@ -529,10 +533,17 @@ export function vueRouterToRou3(path: string, options: VueRouterToRou3Options = 
 
     if (collapse && (overflows || alternatives.some(alternative => !isStaticRou3Segment(alternative)))) {
       const only = tokens.length === 1 ? tokens[0]! : undefined
-      if (only?.type === 'param' && !only.regexp && (only.modifier === '' || only.modifier === '?')) {
-        const segment = `/:_${collapsedParams++}${only.modifier}`
-        variants = variants.map(prefix => prefix + segment)
-        continue
+      if (only?.type === 'param' && !only.regexp) {
+        if (only.modifier === '') {
+          variants = variants.map(prefix => `${prefix}/:_`)
+          beforeOptionals = undefined
+          continue
+        }
+        if (only.modifier === '?' && variants.length * 2 <= maxExpansions) {
+          beforeOptionals ??= variants
+          variants = variants.flatMap(prefix => [prefix, `${prefix}/:_`])
+          continue
+        }
       }
       const params = tokens.filter(token => token.type === 'param')
       report({
@@ -541,8 +552,10 @@ export function vueRouterToRou3(path: string, options: VueRouterToRou3Options = 
         message: `Collapsed "${path}" at segment "${rawSegment}" into a \`**\` catch-all, which also matches nested paths`,
       })
       // `**` already matches zero segments, so optional params right before it are redundant.
-      return { patterns: variants.map(prefix => `${prefix.replace(TRAILING_COLLAPSED_OPTIONALS_RE, '')}/**`), issues }
+      return { patterns: toCollapsedPatterns((beforeOptionals ?? variants).map(prefix => `${prefix}/**`)), issues }
     }
+
+    beforeOptionals = undefined
 
     if (overflows) {
       const collapsed = vueRouterSegmentToRou3(rawSegment, tokens, false)[0]
@@ -562,7 +575,16 @@ export function vueRouterToRou3(path: string, options: VueRouterToRou3Options = 
     variants = next
   }
 
-  return { patterns: variants.map(v => (v === '' ? '/' : v) + (trailingSlash ? '/' : '')), issues }
+  const result = variants.map(v => (v === '' ? '/' : v) + (trailingSlash ? '/' : ''))
+  return { patterns: collapse ? toCollapsedPatterns(result) : result, issues }
+}
+
+/** Number each pattern's collapsed params by position (`:_0`, `:_1`, ...) and drop duplicates. */
+function toCollapsedPatterns(patterns: string[]): string[] {
+  return [...new Set(patterns.map((pattern) => {
+    let index = 0
+    return pattern.replace(COLLAPSED_PARAM_RE, () => `:_${index++}`)
+  }))]
 }
 
 /** `true` if the emitted segment contains no unescaped rou3 syntax (`:`, `*`). */

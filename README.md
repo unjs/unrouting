@@ -328,11 +328,14 @@ vueRouterToRou3('/:pathMatch(.*)*').patterns
 // => ['/:pathMatch(.*)']
 ```
 
-With `collapse: true`, each path becomes a canonical pattern built from static segments, positionally named single-segment params (`:_0`, `:_1`, and so on), and at most one trailing `**` catch-all. This is useful for route-rule keys and other targets that care about the shape of a route rather than its param names: `/products/:id` and `/products/:slug` both collapse to `/products/:_0`. A bare whole-segment param (`:id`) maps exactly to a single-segment param, so no issue is reported and later segments stay intact. A bare optional param keeps its `?` (`/foo/:id?/bar` becomes `/foo/:_0?/bar`). Anything else (a regexp constraint, a partial segment like `prefix-:id`, a repeatable param) collapses into a `**` catch-all from that segment onwards, with a `collapsed` issue. Enumerable params are still expanded first, so the pattern stays as narrow as possible.
+With `collapse: true`, each path becomes a canonical pattern built from static segments, positionally named single-segment params (`:_0`, `:_1`, and so on), and at most one trailing `**` catch-all. This is useful for route-rule keys and other targets that care about the shape of a route rather than its param names: `/products/:id` and `/products/:slug` both collapse to `/products/:_0`. A bare whole-segment param (`:id`) maps exactly to a single-segment param, so no issue is reported and later segments stay intact. A bare optional param expands into both variants (`/foo/:id?/bar` becomes `/foo/bar` and `/foo/:_0/bar`). Anything else (a regexp constraint, a partial segment like `prefix-:id`, a repeatable param, or optional params whose variants would exceed `maxExpansions`) collapses into a `**` catch-all from that segment onwards, with a `collapsed` issue. Enumerable params are still expanded first, so the pattern stays as narrow as possible. The output uses no wildcards or modifiers besides `**`, so it matches the same paths in rou3 0.x, rou3 1.x and radix3.
 
 ```ts
 vueRouterToRou3('/products/:id/edit', { collapse: true }).patterns
 // => ['/products/:_0/edit']
+
+vueRouterToRou3('/blog/:slug?', { collapse: true }).patterns
+// => ['/blog', '/blog/:_0']
 
 vueRouterToRou3('/users/:id(\\d+)/edit', { collapse: true }).patterns
 // => ['/users/**']
@@ -371,7 +374,7 @@ interface RegExpRoute {
 Convert a single rou3/Nitro route pattern into a URLPattern pathname pattern (e.g. for a [Speculation Rules](https://developer.mozilla.org/en-US/docs/Web/API/Speculation_Rules_API) `href_matches` rule, or `new URLPattern({ pathname })`). rou3 aligns its syntax with URLPattern, so most tokens (`:name`, `:name(regex)`, `:name?`, `:name+`, `*`, `(regex)`, `{...}`) pass through unchanged. Only rou3 `**`/`**:name` (catch-all) has no URLPattern equivalent and becomes `*`.
 
 ```ts
-function rou3PatternToURLPattern(pattern: string, options?: { segment?: 'strict' | 'loose' }): {
+function rou3PatternToURLPattern(pattern: string, options?: { segment?: 'strict' | 'loose', wildcard?: 'rest' | 'segment' }): {
   pattern: string
   issues: Rou3ToURLPatternIssue[]
 }
@@ -387,6 +390,12 @@ Pass `{ segment: 'loose' }` to collapse single-segment tokens (`:name`, `(regex)
 const { pattern, issues } = rou3PatternToURLPattern('/users/:id', { segment: 'loose' })
 // pattern => '/users/*'
 // issues => [{ type: 'widened', param: 'id', message: 'Widened ":id" ...' }]
+```
+
+In rou3 0.x and radix3 (Nitro v2), a bare `*` matches a single segment rather than the rest of the path. Pass `{ wildcard: 'segment' }` to convert patterns written for those:
+
+```ts
+rou3PatternToURLPattern('/blog/*', { wildcard: 'segment' }).pattern // => '/blog/([^\/]*)'
 ```
 
 ### `toVueRouterSegment(tokens, options?)`
