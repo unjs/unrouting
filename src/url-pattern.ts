@@ -1,18 +1,10 @@
 /**
  * Convert rou3 / Nitro route patterns into URLPattern pathname syntax.
  *
- * rou3 describes its own syntax as "URLPattern-compatible", and most tokens
- * (`:name`, `:name(regex)`, `:name?`, `:name+`, `:name*`, `(regex)`, `{...}`)
- * mean the same thing in both, so they are passed through unchanged. Only two
- * tokens genuinely differ and are translated:
- *
- * - rou3 `*` is a single-segment wildcard (`[^/]*`); URLPattern `*` is a
- *   greedy catch-all (`.*`, crosses `/`), so rou3 `*` becomes `([^/]*)`.
- * - rou3 `**` (and `**:name`) is a catch-all; URLPattern treats `**`
- *   literally, so it becomes `*`.
- *
- * See rou3's "Differences from URLPattern" table:
- * https://github.com/h3js/rou3#differences-from-urlpattern
+ * rou3 aligns its syntax with URLPattern, so most tokens (`:name`,
+ * `:name(regex)`, `:name?`, `:name+`, `:name*`, `*`, `(regex)`, `{...}`) mean
+ * the same thing in both and are passed through unchanged. Only rou3's `**`
+ * (and `**:name`) catch-all has no URLPattern equivalent and becomes `*`.
  *
  * The resulting strings are URLPattern pathname patterns, so they can be
  * dropped straight into a Speculation Rules `href_matches` rule or passed to
@@ -21,10 +13,9 @@
 
 export interface Rou3ToURLPatternIssue {
   /**
-   * `widened`: the emitted pattern matches more than the rou3 route did, e.g. a
-   * single-segment token mapped to `*` (which crosses `/`) under
-   * `segment: 'loose'`, or a repeating group (`{...}+` / `{...}*`), which rou3
-   * scopes to a single segment but URLPattern repeats across `/`.
+   * `widened`: the emitted pattern matches more than the rou3 route did, i.e.
+   * a single-segment token mapped to `*` (which crosses `/`) under
+   * `segment: 'loose'`.
    */
   type: 'widened'
   /** The param name involved, if the issue concerns a single param. */
@@ -34,10 +25,10 @@ export interface Rou3ToURLPatternIssue {
 
 export interface Rou3PatternToURLPatternOptions {
   /**
-   * How to translate a single-segment token (rou3 `:name` and bare `*`).
+   * How to translate a single-segment token (rou3 `:name` or `(regex)`).
    *
-   * - `'strict'` (default): map to `([^/]+)` / `([^/]*)` so the pattern does
-   *   not match across `/`, preserving rou3's segment-scoped semantics.
+   * - `'strict'` (default): pass it through unchanged, preserving rou3's
+   *   segment-scoped semantics.
    * - `'loose'`: map to URLPattern `*`, matching Nuxt's historical inline
    *   conversion. This over-matches (a single `*` will also match nested
    *   paths) and is reported as a `widened` issue, but produces shorter
@@ -57,8 +48,8 @@ export interface Rou3PatternToURLPatternResult {
  * Convert a single rou3 route pattern into a URLPattern pathname pattern.
  *
  * URLPattern-compatible tokens (named params, constrained params, modifiers,
- * groups) are passed through unchanged; only `*` and `**` are translated (see
- * the module doc comment). Backslash-escaped characters are left as-is.
+ * groups, `*`) are passed through unchanged; only `**` is translated (see the
+ * module doc comment). Backslash-escaped characters are left as-is.
  *
  * Any widening step is recorded in `issues` (see {@link Rou3ToURLPatternIssue}),
  * so callers can surface risky conversions to their users rather than silently
@@ -79,6 +70,7 @@ export function rou3PatternToURLPattern(
 }
 
 const WORD_RE = /\w/
+const CATCH_ALL_GROUP = '(.*)'
 
 function isModifier(char: string | undefined): boolean {
   return char === '?' || char === '+' || char === '*'
@@ -108,23 +100,15 @@ function convertSegment(
     }
 
     if (char === '*') {
-      if (segment[i + 1] === '*') {
-        i += 2
+      i++
+      if (segment[i] === '*') {
+        i++
         if (segment[i] === ':') {
           i++
           while (i < segment.length && WORD_RE.test(segment[i])) i++
         }
-        out += '*'
-        continue
       }
-      if (loose) {
-        report({ type: 'widened', message: `Widened \`*\` in "${pattern}" to \`*\`, which matches across \`/\`` })
-        out += '*'
-      }
-      else {
-        out += '([^/]*)'
-      }
-      i++
+      out += '*'
       continue
     }
 
@@ -136,12 +120,14 @@ function convertSegment(
         name += segment[i]
         i++
       }
+      const groupStart = i
       if (segment[i] === '(')
         i = skipGroup(segment, i)
+      const catchAll = segment.slice(groupStart, i) === CATCH_ALL_GROUP
       if (isModifier(segment[i]))
         i++
 
-      if (loose) {
+      if (loose && !catchAll) {
         report({ type: 'widened', param: name, message: `Widened ":${name}" in "${pattern}" to \`*\`, which matches across \`/\`` })
         out += '*'
       }
@@ -154,9 +140,10 @@ function convertSegment(
     if (char === '(') {
       const start = i
       i = skipGroup(segment, i)
+      const catchAll = segment.slice(start, i) === CATCH_ALL_GROUP
       if (isModifier(segment[i]))
         i++
-      if (loose) {
+      if (loose && !catchAll) {
         report({ type: 'widened', message: `Widened unnamed group in "${pattern}" to \`*\`, which matches across \`/\`` })
         out += '*'
       }
@@ -174,10 +161,9 @@ function convertSegment(
         i++
       }
       i++
-      const modifier = isModifier(segment[i]) ? segment[i++] : ''
+      if (isModifier(segment[i]))
+        i++
       out += segment.slice(start, i)
-      if (modifier === '+' || modifier === '*')
-        report({ type: 'widened', message: `Repeating group "{...}${modifier}" in "${pattern}" matches across \`/\` in URLPattern but only within a segment in rou3` })
       continue
     }
 
