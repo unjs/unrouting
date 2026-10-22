@@ -420,7 +420,8 @@ export interface VueRouterToRou3Options {
    * region prefixes rather than faithful matchers. The output uses no
    * wildcards or modifiers besides `**`, so it matches the same paths in
    * rou3 0.x, rou3 1.x and radix3, except for static text that has to be
-   * escaped (`:`, `(`, `)`, `{`, `}`, `*`), which radix3 does not unescape.
+   * escaped (`:`, `(`, `)`, `{`, `}`, `*`): radix3 does not unescape any of
+   * these, and rou3 0.x does not unescape `\*`.
    *
    * @default false
    */
