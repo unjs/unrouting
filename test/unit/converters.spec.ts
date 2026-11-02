@@ -508,6 +508,8 @@ describe('vueRouterToRou3', () => {
     expect(patterns('/pre-:path(.*)')).toEqual(['/pre-:path(.*)'])
     expect(patterns('/pre-:path(.*)*')).toEqual(['/pre-:path(.*)'])
     expect(patterns('/:path(.*)/edit')).toEqual(['/:path(.*)/edit'])
+    expect(patterns('/pre-:path([^/]*)*-post')).toEqual(['/pre-:path(.*)-post'])
+    expect(patterns('/:path([^/]*)*/edit')).toEqual(['/:path(.*)/edit'])
   })
 
   it('collapses catch-alls rou3 cannot represent', () => {
@@ -935,6 +937,10 @@ describe('vue-router support', () => {
       'prefix/[...slug].vue',
       '[...slug]/suffix.vue',
       'prefix/[...slug]/suffix.vue',
+      'foo[...id]bar.vue',
+      '[...id]bar.vue',
+      'foo[[...id]]bar.vue',
+      'a/[...slug]-x.vue',
     ]
     const result = patterns.map(p => toVueRouter4(tree([p]))[0].path)
     expect(result).toMatchInlineSnapshot(`
@@ -943,8 +949,39 @@ describe('vue-router support', () => {
         "/prefix/:slug(.*)*",
         "/:slug([^/]*)*/suffix",
         "/prefix/:slug([^/]*)*/suffix",
+        "/foo:id([^/]*)*bar",
+        "/:id([^/]*)*bar",
+        "/foo:id([^/]*)*bar",
+        "/a/:slug([^/]*)*-x",
       ]
     `)
+  })
+
+  it('should resolve catchalls with a static suffix in linear time', () => {
+    const resolve = (file: string, path: string) => {
+      const router = createVueRouter({
+        history: createMemoryHistory(),
+        routes: [{ path: toVueRouter4(tree([file]))[0].path, component: () => ({}) }],
+      })
+      const resolved = router.resolve(path)
+      return resolved.matched.length ? resolved.params : undefined
+    }
+
+    expect(resolve('foo[...id]bar.vue', '/fooa/b/cbar')).toEqual({ id: ['a', 'b', 'c'] })
+    expect(resolve('foo[...id]bar.vue', '/foo/x/bar')).toEqual({ id: ['', 'x', ''] })
+    expect(resolve('foo[...id]bar.vue', '/foobar')).toEqual({})
+    expect(resolve('a/[...slug]-x.vue', '/a/b/c-x')).toEqual({ slug: ['b', 'c'] })
+
+    const start = performance.now()
+    for (const file of ['foo[...id]bar.vue', '[...id]bar.vue', 'foo[[...id]]bar.vue', 'a/[...slug]-x.vue'])
+      expect(resolve(file, `/foo${'/'.repeat(5000)}x`)).toBeUndefined()
+    expect(performance.now() - start).toBeLessThan(1000)
+  })
+
+  it('should nest children under catchalls with a static suffix', () => {
+    const [route] = toVueRouter4(tree(['foo[...id]bar.vue', 'foo[...id]bar/child.vue']))
+    expect(route.path).toBe('/foo:id([^/]*)*bar')
+    expect(route.children.map(child => child.path)).toEqual(['child'])
   })
 
   it('should handle group segments', () => {
@@ -1502,6 +1539,12 @@ describe('toVueRouterSegment', () => {
     expect(toVueRouterSegment(parseSegment('[...slug]'), { hasSucceeding: false })).toBe(':slug(.*)*')
   })
 
+  it('converts catchall tokens followed by tokens in the same segment', () => {
+    expect(toVueRouterSegment(parseSegment('foo[...slug]bar'))).toBe('foo:slug([^/]*)*bar')
+    expect(toVueRouterSegment(parseSegment('[...slug][id]'))).toBe(':slug([^/]*)*:id()')
+    expect(toVueRouterSegment(parseSegment('foo[...slug](group)'))).toBe('foo:slug(.*)*')
+  })
+
   it('converts repeatable tokens', () => {
     expect(toVueRouterSegment(parseSegment('[slug]+'))).toBe(':slug+')
   })
@@ -1524,7 +1567,7 @@ describe('toVueRouterSegment', () => {
 
   it('handles the i18n use case from the feature request', () => {
     const tokens = parseSegment('[foo]_[bar]:[...buz]_buz_[[qux]]')
-    expect(toVueRouterSegment(tokens)).toBe(':foo()_:bar()\\::buz(.*)*_buz_:qux?')
+    expect(toVueRouterSegment(tokens)).toBe(':foo()_:bar()\\::buz([^/]*)*_buz_:qux?')
   })
 
   it('handles multiple dynamic tokens', () => {

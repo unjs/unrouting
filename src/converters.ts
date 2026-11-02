@@ -254,7 +254,7 @@ export function toVueRouter4<const Attrs extends Record<string, string[]> = neve
 
       const match = parent.find(r =>
         r.name === route.name
-        && r.path === normalizedFullPath,
+        && r.path.replaceAll('([^/]*)*', '(.*)*') === normalizedFullPath,
       )
 
       if (match?.children) {
@@ -642,7 +642,7 @@ function findRou3CatchAllConflict(segments: VueRouterPathToken[][]): number {
   let first = -1
   for (const [index, tokens] of segments.entries()) {
     for (const token of tokens) {
-      const star = token.regexp === '.*'
+      const star = isVueRouterCatchAll(token)
       if (!star && token.modifier !== '+' && token.modifier !== '*')
         continue
       if (first !== -1)
@@ -653,6 +653,11 @@ function findRou3CatchAllConflict(segments: VueRouterPathToken[][]): number {
     }
   }
   return -1
+}
+
+/** `:name(.*)` or `:name([^/]*)*`, both of which match any string. */
+function isVueRouterCatchAll(token: VueRouterPathToken): boolean {
+  return token.regexp === '.*' || (token.regexp === '[^/]*' && token.modifier === '*')
 }
 
 function vueRouterSegmentToRou3(segment: string, tokens: VueRouterPathToken[], expand: boolean, maxExpansions = Number.POSITIVE_INFINITY, report?: (issue: VueRouterToRou3Issue) => void): string[] {
@@ -694,7 +699,7 @@ function vueRouterSegmentToRou3(segment: string, tokens: VueRouterPathToken[], e
 
 function vueRouterTokenToRou3(token: VueRouterPathToken, sharesSegment: boolean, expand: boolean, report?: (issue: VueRouterToRou3Issue) => void): string[] {
   // rou3 treats `(.*)` as a catch-all that takes no modifier and also matches empty segments.
-  if (token.regexp === '.*')
+  if (isVueRouterCatchAll(token))
     return [`:${token.name}(.*)`]
 
   if (token.regexp && (token.modifier === '+' || token.modifier === '*')) {
@@ -924,7 +929,8 @@ export interface ToVueRouterSegmentOptions {
   /**
    * Whether there are non-index segments following this one.
    * When `true`, catchall tokens use `([^/]*)*` (restrictive);
-   * when `false` (default), they use `(.*)*` (permissive).
+   * when `false` (default), they use `(.*)*` (permissive) unless other
+   * tokens follow them in the same segment.
    */
   hasSucceeding?: boolean
 }
@@ -943,7 +949,7 @@ export function toVueRouterSegment(
 ): string {
   const hasSucceeding = options?.hasSucceeding ?? false
   let out = ''
-  for (const token of tokens) {
+  for (const [index, token] of tokens.entries()) {
     switch (token.type) {
       case 'group':
         continue
@@ -968,7 +974,9 @@ export function toVueRouterSegment(
         break
 
       case 'catchall':
-        out += hasSucceeding ? `:${token.value}([^/]*)*` : `:${token.value}(.*)*`
+        out += hasSucceeding || tokens.slice(index + 1).some(t => t.type !== 'group')
+          ? `:${token.value}([^/]*)*`
+          : `:${token.value}(.*)*`
         break
     }
   }

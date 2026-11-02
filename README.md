@@ -412,6 +412,7 @@ interface ToVueRouterSegmentOptions {
   /**
    * Whether non-index segments follow this one.
    * When true, catchall uses ([^/]*)*; when false (default), uses (.*)*
+   * unless other tokens follow it in the same segment.
    */
   hasSucceeding?: boolean
 }
@@ -428,7 +429,7 @@ toVueRouterSegment(parseSegment('prefix-[slug]')) // => 'prefix-:slug()'
 // i18n use case – parse a custom locale path segment
 const tokens = parseSegment('[foo]_[bar]:[...buz]_buz_[[qux]]')
 const path = `/${toVueRouterSegment(tokens)}`
-// => '/:foo()_:bar()\::buz(.*)*_buz_:qux?'
+// => '/:foo()_:bar()\::buz([^/]*)*_buz_:qux?'
 ```
 
 ### `toVueRouterPath(segments)`
