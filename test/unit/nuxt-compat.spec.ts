@@ -196,12 +196,21 @@ describe('nuxt compatibility: generateRoutes from files', () => {
       `${pagesDir}/\u062E\u0627\u0635:\u062C\u062F\u064A\u062F.vue`,
     ]), [
       { name: '\u6D4B\u8BD5', path: `/${encodeURIComponent('\u6D4B\u8BD5')}`, file: `${pagesDir}/\u6D4B\u8BD5.vue`, children: [] },
+      // decoded twin: unnamed, lets the raw spelling (e.g. `/测试`) match programmatically
+      { path: '/\u6D4B\u8BD5', file: `${pagesDir}/\u6D4B\u8BD5.vue`, children: [] },
       {
         name: '\u6587\u6863',
         path: `/${encodeURIComponent('\u6587\u6863')}`,
         file: `${pagesDir}/\u6587\u6863.vue`,
         children: [
           { name: '\u6587\u6863-\u4ECB\u7ECD', path: encodeURIComponent('\u4ECB\u7ECD'), file: `${pagesDir}/\u6587\u6863/\u4ECB\u7ECD.vue`, children: [] },
+        ],
+      },
+      {
+        path: '/\u6587\u6863',
+        file: `${pagesDir}/\u6587\u6863.vue`,
+        children: [
+          { path: '\u4ECB\u7ECD', file: `${pagesDir}/\u6587\u6863/\u4ECB\u7ECD.vue`, children: [] },
         ],
       },
       { name: '\u062E\u0627\u0635:\u062C\u062F\u064A\u062F', path: `/${encodeURIComponent('\u062E\u0627\u0635')}\\:${encodeURIComponent('\u062C\u062F\u064A\u062F')}`, file: `${pagesDir}/\u062E\u0627\u0635:\u062C\u062F\u064A\u062F.vue`, children: [] },
