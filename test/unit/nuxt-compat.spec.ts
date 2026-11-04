@@ -333,4 +333,82 @@ describe('nuxt compatibility: generateRoutes from files', () => {
       },
     ])
   })
+
+  it('should handle route groups with parent layout files', () => {
+    expectRoutes(generateRoutes([
+      `${pagesDir}/(marketing).vue`,
+      `${pagesDir}/(marketing)/index.vue`,
+      `${pagesDir}/(marketing)/about.vue`,
+    ]), [
+      {
+        path: '',
+        file: `${pagesDir}/(marketing).vue`,
+        meta: { groups: ['marketing'] },
+        children: [
+          { name: 'about', path: 'about', file: `${pagesDir}/(marketing)/about.vue`, meta: { groups: ['marketing'] }, children: [] },
+          { name: 'index', path: '', file: `${pagesDir}/(marketing)/index.vue`, meta: { groups: ['marketing'] }, children: [] },
+        ],
+      },
+    ])
+  })
+
+  it('should prioritize route group parent with default child over route group parent without default child', () => {
+    expectRoutes(generateRoutes([
+      `${pagesDir}/(admin).vue`,
+      `${pagesDir}/(admin)/dashboard.vue`,
+      `${pagesDir}/(marketing).vue`,
+      `${pagesDir}/(marketing)/index.vue`,
+    ]), [
+      {
+        path: '',
+        file: `${pagesDir}/(marketing).vue`,
+        meta: { groups: ['marketing'] },
+        children: [
+          { name: 'index', path: '', file: `${pagesDir}/(marketing)/index.vue`, meta: { groups: ['marketing'] }, children: [] },
+        ],
+      },
+      {
+        path: '',
+        file: `${pagesDir}/(admin).vue`,
+        meta: { groups: ['admin'] },
+        children: [
+          { name: 'dashboard', path: 'dashboard', file: `${pagesDir}/(admin)/dashboard.vue`, meta: { groups: ['admin'] }, children: [] },
+        ],
+      },
+    ])
+
+    expectRoutes(generateRoutes([
+      `${pagesDir}/(a_admin).vue`,
+      `${pagesDir}/(a_admin)/dashboard.vue`,
+      `${pagesDir}/(b_marketing).vue`,
+      `${pagesDir}/(b_marketing)/index.vue`,
+      `${pagesDir}/(c_zebra).vue`,
+      `${pagesDir}/(c_zebra)/settings.vue`,
+    ]), [
+      {
+        path: '',
+        file: `${pagesDir}/(b_marketing).vue`,
+        meta: { groups: ['b_marketing'] },
+        children: [
+          { name: 'index', path: '', file: `${pagesDir}/(b_marketing)/index.vue`, meta: { groups: ['b_marketing'] }, children: [] },
+        ],
+      },
+      {
+        path: '',
+        file: `${pagesDir}/(a_admin).vue`,
+        meta: { groups: ['a_admin'] },
+        children: [
+          { name: 'dashboard', path: 'dashboard', file: `${pagesDir}/(a_admin)/dashboard.vue`, meta: { groups: ['a_admin'] }, children: [] },
+        ],
+      },
+      {
+        path: '',
+        file: `${pagesDir}/(c_zebra).vue`,
+        meta: { groups: ['c_zebra'] },
+        children: [
+          { name: 'settings', path: 'settings', file: `${pagesDir}/(c_zebra)/settings.vue`, meta: { groups: ['c_zebra'] }, children: [] },
+        ],
+      },
+    ])
+  })
 })

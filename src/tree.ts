@@ -135,9 +135,9 @@ function insertParsedPath(root: RouteNode, parsedPath: ParsedPath, priority: num
   const groups: string[] = []
 
   for (const segment of parsedPath.segments) {
-    if (segment.every(token => token.type === 'group')) {
-      for (const token of segment) groups.push(token.value)
-      continue
+    for (const token of segment) {
+      if (token.type === 'group')
+        groups.push(token.value)
     }
     const key = segmentToKey(segment)
     if (!current.children.has(key))
@@ -305,7 +305,7 @@ function tokenToString(token: { type: string, value: string }): string {
   }
 }
 
-function segmentToKey(segment: ParsedPathSegment): string {
+export function segmentToKey(segment: ParsedPathSegment): string {
   return segment.map(tokenToString).join('')
 }
 
