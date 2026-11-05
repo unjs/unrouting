@@ -2,5 +2,11 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "github>danielroe/renovate"
+  ],
+  "packageRules": [
+    {
+      "matchPackageNames": ["rou3-v0"],
+      "enabled": false
+    }
   ]
 }
