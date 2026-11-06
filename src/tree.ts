@@ -81,7 +81,13 @@ export interface RouteTree {
 // --- Tree construction -------------------------------------------------------
 
 function createNode(rawSegment: string, segment: ParsedPathSegment, parent: RouteNode | null): RouteNode {
-  return { rawSegment, segment, files: [], children: new Map(), parent }
+  return {
+    rawSegment,
+    segment,
+    files: [],
+    children: new Map(),
+    parent,
+  }
 }
 
 /**
@@ -94,7 +100,9 @@ export function buildTree(
   input: string[] | InputFile[] | ParsedPath[],
   options: BuildTreeOptions = {},
 ): RouteTree {
-  const root = createNode('', [{ type: 'static', value: '' }], null)
+  const root = createNode('', [
+    { type: 'static', value: '' },
+  ], null)
   const fileIndex = new Map<string, RouteNode>()
 
   if (input.length === 0)
@@ -200,12 +208,22 @@ export function addFile(
   filePath: string | InputFile,
   options: BuildTreeOptions | CompiledParsePath = {},
 ): void {
-  const path = typeof filePath === 'string' ? filePath : filePath.path
-  const priority = typeof filePath === 'string' ? 0 : (filePath.priority ?? 0)
-  const parseOne = isCompiledParsePath(options) ? options : parsePath
-  const parseOpts = isCompiledParsePath(options) ? undefined : options
+  const path = typeof filePath === 'string'
+    ? filePath
+    : filePath.path
+  const priority = typeof filePath === 'string'
+    ? 0
+    : (filePath.priority ?? 0)
+  const parseOne = isCompiledParsePath(options)
+    ? options
+    : parsePath
+  const parseOpts = isCompiledParsePath(options)
+    ? undefined
+    : options
   const [parsed] = parseOne([path], parseOpts as any)
-  insertParsedPath(tree.root, parsed, priority, (isCompiledParsePath(options) ? {} : options) as BuildTreeOptions, tree['~fileIndex'])
+  insertParsedPath(tree.root, parsed, priority, (isCompiledParsePath(options)
+    ? {}
+    : options) as BuildTreeOptions, tree['~fileIndex'])
   tree['~dirty'] = true
 }
 
@@ -312,7 +330,9 @@ function segmentToKey(segment: ParsedPathSegment): string {
 function reconstructRelativePath(parsedPath: ParsedPath): string {
   const ext = parsedPath.file.match(/\.[^./]+$/)?.[0] || ''
   const path = parsedPath.segments.map(seg =>
-    seg.map(t => t.type === 'static' && t.value === '' ? 'index' : tokenToString(t)).join(''),
+    seg.map(t => t.type === 'static' && t.value === ''
+      ? 'index'
+      : tokenToString(t)).join(''),
   ).join('/')
   return path + ext
 }

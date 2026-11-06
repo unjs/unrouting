@@ -5,7 +5,9 @@ import { describe, expect, it } from 'vitest'
 import { rou3PatternToURLPattern } from '../../src'
 
 function convert(pattern: string, segment?: 'strict' | 'loose') {
-  return rou3PatternToURLPattern(pattern, segment ? { segment } : undefined).pattern
+  return rou3PatternToURLPattern(pattern, segment
+    ? { segment }
+    : undefined).pattern
 }
 
 describe('rou3PatternToURLPattern', () => {
@@ -59,7 +61,12 @@ describe('rou3PatternToURLPattern', () => {
     expect(convertSegment('/files/*.png').pattern).toBe('/files/([^\\/]*).png')
     expect(convertSegment('/api/:v/*/**').pattern).toBe('/api/:v/([^\\/]*)/*')
     expect(convertSegment('/files/*').issues).toEqual([])
-    expect(convertSegment('/files/*', 'loose')).toMatchObject({ pattern: '/files/*', issues: [{ type: 'widened' }] })
+    expect(convertSegment('/files/*', 'loose')).toMatchObject({
+      pattern: '/files/*',
+      issues: [
+        { type: 'widened' },
+      ],
+    })
     expect(convertSegment('/blog/**', 'loose')).toEqual({ pattern: '/blog/*', issues: [] })
   })
 
@@ -94,7 +101,12 @@ describe('rou3PatternToURLPattern', () => {
       .replace(/\*\*:\w+/g, '*')
       .replace(/\*\*/g, '*')
       .replace(/:\w+/g, '*')
-    for (const route of ['/blog/**', '/blog/**:rest', '/users/:id', '/a/:b/**:c']) {
+    for (const route of [
+      '/blog/**',
+      '/blog/**:rest',
+      '/users/:id',
+      '/a/:b/**:c',
+    ]) {
       expect(convert(route, 'loose')).toBe(nuxtInline(route))
     }
   })
@@ -112,19 +124,28 @@ describe('rou3PatternToURLPattern', () => {
 
     it('reports the widening of a named param in loose mode', () => {
       const { issues } = rou3PatternToURLPattern('/users/:id', { segment: 'loose' })
-      expect(issues).toMatchObject([{ type: 'widened', param: 'id' }])
+      expect(issues).toMatchObject([
+        { type: 'widened', param: 'id' },
+      ])
     })
 
     it('reports the widening of an unnamed group in loose mode', () => {
       const { pattern, issues } = rou3PatternToURLPattern('/path/(\\d+)', { segment: 'loose' })
       expect(pattern).toBe('/path/*')
-      expect(issues).toMatchObject([{ type: 'widened' }])
+      expect(issues).toMatchObject([
+        { type: 'widened' },
+      ])
     })
   })
 
   it('matches the same paths as rou3', () => {
     const cases: Record<string, string[]> = {
-      '/blog/*': ['/blog/a', '/blog/a/b', '/blog/', '/other'],
+      '/blog/*': [
+        '/blog/a',
+        '/blog/a/b',
+        '/blog/',
+        '/other',
+      ],
       '/files/*.png': ['/files/a.png', '/files/a/b.png', '/files/a.jpg'],
       '/users/:id': ['/users/1', '/users/1/2', '/users'],
       '/users/:id?': ['/users', '/users/1', '/users/1/2'],
@@ -137,7 +158,9 @@ describe('rou3PatternToURLPattern', () => {
     for (const [route, paths] of Object.entries(cases)) {
       const router = createRouter()
       addRoute(router, 'GET', route, route)
-      const urlPattern = new URLPattern({ pathname: convert(route) })
+      const urlPattern = new URLPattern({
+        pathname: convert(route),
+      })
       for (const path of paths)
         expect(urlPattern.test({ pathname: path }), `${route} on ${path}`).toBe(!!findRoute(router, 'GET', path))
     }
@@ -152,7 +175,9 @@ describe('rou3PatternToURLPattern', () => {
     for (const [route, paths] of Object.entries(cases)) {
       const router = createRouterV0()
       addRouteV0(router, 'GET', route, route)
-      const radix = toRouteMatcher(createRadixRouter({ routes: { [route]: {} } }))
+      const radix = toRouteMatcher(createRadixRouter({
+        routes: { [route]: {} },
+      }))
       const urlPattern = new URLPattern({ pathname: rou3PatternToURLPattern(route, { wildcard: 'segment' }).pattern })
       for (const path of paths) {
         expect(urlPattern.test({ pathname: path }), `${route} on ${path} (rou3 0.x)`).toBe(!!findRouteV0(router, 'GET', path))

@@ -100,7 +100,9 @@ function flattenTree(tree: RouteTree): FlatFileInfo[] {
 
     // Group by group-path — mode variants share a group path
     const byGroupPath = new Map<string, RouteNodeFile[]>()
-    for (const f of (defaults.length > 0 ? defaults : node.files)) {
+    for (const f of (defaults.length > 0
+      ? defaults
+      : node.files)) {
       const key = f.groups.join(',')
       let group = byGroupPath.get(key)
       if (!group) {
@@ -155,7 +157,9 @@ function cloneRoute(route: VueRoute): VueRoute {
   const clone: VueRoute = {
     path: route.path,
     file: route.file,
-    children: route.children.length ? cloneRoutes(route.children) : [],
+    children: route.children.length
+      ? cloneRoutes(route.children)
+      : [],
   }
   if (route.name !== undefined)
     clone.name = route.name
@@ -242,11 +246,15 @@ export function toVueRouter4<const Attrs extends Record<string, string[]> = neve
       const isIndex = isIndexSegment(seg)
       const segmentName = isIndex
         ? 'index'
-        : seg.map(t => t.type === 'group' ? '' : t.value).join('')
+        : seg.map(t => t.type === 'group'
+            ? ''
+            : t.value).join('')
 
       route.name += (route.name && '/') + segmentName
 
-      const nextSeg = i < info.segments.length - 1 ? info.segments[i + 1] : undefined
+      const nextSeg = i < info.segments.length - 1
+        ? info.segments[i + 1]
+        : undefined
       const hasNextNonIndex = !!nextSeg && !isIndexSegment(nextSeg)
       const routePath = `/${toVueRouterSegment(seg, { hasSucceeding: hasNextNonIndex })}`
       const fullPath = joinURL(route.path || '/', isIndex ? '/' : routePath)
@@ -305,7 +313,9 @@ export function toRou3(tree: RouteTree): Rou3Route[] {
             break
           }
           case 'optional': {
-            part += isOwnRou3PathSegment(segment) ? `:${name}?` : `:${name}([^\\x2f]*)`
+            part += isOwnRou3PathSegment(segment)
+              ? `:${name}?`
+              : `:${name}([^\\x2f]*)`
             break
           }
           case 'catchall': {
@@ -361,7 +371,9 @@ const LEADING_WORD_CHAR_RE = /^\w/
 
 /** Append to a rou3 pattern, escaping a leading word char that would otherwise extend a preceding `:name`. */
 function appendRou3(prefix: string, text: string): string {
-  return prefix + (LEADING_WORD_CHAR_RE.test(text) && TRAILING_PARAM_NAME_RE.test(prefix) ? `\\${text}` : text)
+  return prefix + (LEADING_WORD_CHAR_RE.test(text) && TRAILING_PARAM_NAME_RE.test(prefix)
+    ? `\\${text}`
+    : text)
 }
 
 function assertTerminalRou3Repeatable(segments: ParsedPathSegment[], segmentIndex: number, segment: ParsedPathSegment, type: string): void {
@@ -517,7 +529,9 @@ export function vueRouterToRou3(path: string, options: VueRouterToRou3Options = 
     }
     return { raw, tokens }
   })
-  const catchAllConflictAt = collapse ? -1 : findRou3CatchAllConflict(segments.map(segment => segment.tokens))
+  const catchAllConflictAt = collapse
+    ? -1
+    : findRou3CatchAllConflict(segments.map(segment => segment.tokens))
 
   let variants: string[] = ['']
   /** Variants before the trailing run of expanded optional params, if any. */
@@ -528,7 +542,10 @@ export function vueRouterToRou3(path: string, options: VueRouterToRou3Options = 
         type: 'collapsed',
         message: `Collapsed "${path}" at segment "${rawSegment}" into a \`**\` catch-all because rou3 supports only one catch-all per route, filling its own segment when repeatable`,
       })
-      return { patterns: variants.map(prefix => `${prefix}/**`), issues }
+      return {
+        patterns: variants.map(prefix => `${prefix}/**`),
+        issues,
+      }
     }
 
     // In collapse mode token-level issues are irrelevant: any segment that
@@ -537,7 +554,9 @@ export function vueRouterToRou3(path: string, options: VueRouterToRou3Options = 
     const overflows = variants.length * alternatives.length > maxExpansions
 
     if (collapse && (overflows || alternatives.some(alternative => !isStaticRou3Segment(alternative)))) {
-      const only = tokens.length === 1 ? tokens[0]! : undefined
+      const only = tokens.length === 1
+        ? tokens[0]!
+        : undefined
       if (only?.type === 'param' && !only.regexp) {
         if (only.modifier === '') {
           variants = variants.map(prefix => `${prefix}/:_`)
@@ -553,11 +572,16 @@ export function vueRouterToRou3(path: string, options: VueRouterToRou3Options = 
       const params = tokens.filter(token => token.type === 'param')
       report({
         type: 'collapsed',
-        param: params.length === 1 ? params[0]!.value : undefined,
+        param: params.length === 1
+          ? params[0]!.value
+          : undefined,
         message: `Collapsed "${path}" at segment "${rawSegment}" into a \`**\` catch-all, which also matches nested paths`,
       })
       // `**` already matches zero segments, so optional params right before it are redundant.
-      return { patterns: toCollapsedPatterns((beforeOptionals ?? variants).map(prefix => `${prefix}/**`)), issues }
+      return {
+        patterns: toCollapsedPatterns((beforeOptionals ?? variants).map(prefix => `${prefix}/**`)),
+        issues,
+      }
     }
 
     beforeOptionals = undefined
@@ -574,22 +598,34 @@ export function vueRouterToRou3(path: string, options: VueRouterToRou3Options = 
 
     const next: string[] = []
     for (const prefix of variants) {
-      for (const alternative of alternatives)
-        next.push(alternative === '' ? prefix : `${prefix}/${alternative}`)
+      for (const alternative of alternatives) {
+        next.push(alternative === ''
+          ? prefix
+          : `${prefix}/${alternative}`)
+      }
     }
     variants = next
   }
 
-  const result = variants.map(v => (v === '' ? '/' : v) + (trailingSlash ? '/' : ''))
-  return { patterns: collapse ? toCollapsedPatterns(result) : result, issues }
+  const result = variants.map(v => (v === ''
+    ? '/'
+    : v) + (trailingSlash ? '/' : ''))
+  return {
+    patterns: collapse
+      ? toCollapsedPatterns(result)
+      : result,
+    issues,
+  }
 }
 
 /** Number each pattern's collapsed params by position (`:_0`, `:_1`, ...) and drop duplicates. */
 function toCollapsedPatterns(patterns: string[]): string[] {
-  return [...new Set(patterns.map((pattern) => {
-    let index = 0
-    return pattern.replace(COLLAPSED_PARAM_RE, () => `:_${index++}`)
-  }))]
+  return [
+    ...new Set(patterns.map((pattern) => {
+      let index = 0
+      return pattern.replace(COLLAPSED_PARAM_RE, () => `:_${index++}`)
+    })),
+  ]
 }
 
 /** `true` if the emitted segment contains no unescaped rou3 syntax (`:`, `*`). */
@@ -686,7 +722,11 @@ function vueRouterSegmentToRou3(segment: string, tokens: VueRouterPathToken[], e
 
   let parts: string[] = ['']
   for (const [index, token] of tokens.entries()) {
-    const alternatives = token.type === 'static' ? [toRou3Static(token.value, dynamic)] : resolved[index]!
+    const alternatives = token.type === 'static'
+      ? [
+          toRou3Static(token.value, dynamic),
+        ]
+      : resolved[index]!
     const next: string[] = []
     for (const prefix of parts) {
       for (const alternative of alternatives)
@@ -717,7 +757,9 @@ function vueRouterTokenToRou3(token: VueRouterPathToken, sharesSegment: boolean,
     && ENUMERABLE_ALTERNATION_RE.test(token.regexp)
   ) {
     const branches = token.regexp.split('|')
-    return token.modifier === '?' ? ['', ...branches] : branches
+    return token.modifier === '?'
+      ? ['', ...branches]
+      : branches
   }
 
   const name = token.name!
@@ -744,7 +786,11 @@ function vueRouterTokenToRou3(token: VueRouterPathToken, sharesSegment: boolean,
   switch (token.modifier) {
     case '?':
       // rou3 only accepts `:name?` at the end of a segment.
-      return [sharesSegment ? `{:${name}${constraint}}?` : `:${name}${constraint}?`]
+      return [
+        sharesSegment
+          ? `{:${name}${constraint}}?`
+          : `:${name}${constraint}?`,
+      ]
     case '+':
       return [`:${name}+`]
     case '*':
@@ -847,7 +893,12 @@ function parseVueRouterSegment(segment: string): VueRouterPathToken[] {
       i++
     }
 
-    tokens.push({ type: 'param', value: name, regexp, modifier })
+    tokens.push({
+      type: 'param',
+      value: name,
+      regexp,
+      modifier,
+    })
   }
 
   flushStatic()
@@ -897,12 +948,19 @@ export function toRegExp(tree: RouteTree): RegExpRoute[] {
       const isOptional = segment.every(t =>
         t.type === 'optional' || t.type === 'catchall' || t.type === 'group' || t.type === 'optional-repeatable',
       )
-      if (re)
-        source += isOptional ? `(?:\\/${re})?` : `\\/${re}`
+      if (re) {
+        source += isOptional
+          ? `(?:\\/${re})?`
+          : `\\/${re}`
+      }
     }
 
     source += '\\/?$'
-    return { pattern: new RegExp(source), keys, file: info.file }
+    return {
+      pattern: new RegExp(source),
+      keys,
+      file: info.file,
+    }
   })
 }
 
@@ -1056,7 +1114,9 @@ function prepareRoutes(
     if (parent && path[0] === '/')
       path = path.slice(1)
 
-    const children = route.children.length ? prepareRoutes(route.children, route, options, names) : []
+    const children = route.children.length
+      ? prepareRoutes(route.children, route, options, names)
+      : []
     if (children.some(c => c.path === ''))
       name = undefined
 
@@ -1144,8 +1204,15 @@ function computeScoreSegments(route: IntermediateRoute): number[] {
   return route.path.split('/').filter(Boolean).map((part) => {
     if (part.includes('(.*)*') || part.includes('([^/]*)*'))
       return -400
-    if (UNESCAPED_COLON_RE.test(part))
-      return part.includes('?') ? 100 : part.includes('+') ? 200 : part.includes('*') ? 50 : 300
+    if (UNESCAPED_COLON_RE.test(part)) {
+      return part.includes('?')
+        ? 100
+        : part.includes('+')
+          ? 200
+          : part.includes('*')
+            ? 50
+            : 300
+    }
     return 400
   })
 }

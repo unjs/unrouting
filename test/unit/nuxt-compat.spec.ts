@@ -14,7 +14,12 @@ import { buildTree, toVueRouter4 } from '../../src'
 const collator = new Intl.Collator('en-US')
 function sortRoutes(routes: any[]): any[] {
   return [...routes]
-    .map(r => ({ ...r, children: r.children ? sortRoutes(r.children) : [] }))
+    .map(r => ({
+      ...r,
+      children: r.children
+        ? sortRoutes(r.children)
+        : [],
+    }))
     .sort((a: any, b: any) => collator.compare(b.path, a.path))
 }
 
@@ -37,9 +42,24 @@ describe('nuxt compatibility: generateRoutes from files', () => {
       `${pagesDir}/parent/index.vue`,
       `${pagesDir}/parent/child/index.vue`,
     ]), [
-      { name: 'index', path: '/', file: `${pagesDir}/index.vue`, children: [] },
-      { name: 'parent', path: '/parent', file: `${pagesDir}/parent/index.vue`, children: [] },
-      { name: 'parent-child', path: '/parent/child', file: `${pagesDir}/parent/child/index.vue`, children: [] },
+      {
+        name: 'index',
+        path: '/',
+        file: `${pagesDir}/index.vue`,
+        children: [],
+      },
+      {
+        name: 'parent',
+        path: '/parent',
+        file: `${pagesDir}/parent/index.vue`,
+        children: [],
+      },
+      {
+        name: 'parent-child',
+        path: '/parent/child',
+        file: `${pagesDir}/parent/child/index.vue`,
+        children: [],
+      },
     ])
   })
 
@@ -53,7 +73,12 @@ describe('nuxt compatibility: generateRoutes from files', () => {
         path: '/parent',
         file: `${pagesDir}/parent.vue`,
         children: [
-          { name: 'parent-child', path: 'child', file: `${pagesDir}/parent/child.vue`, children: [] },
+          {
+            name: 'parent-child',
+            path: 'child',
+            file: `${pagesDir}/parent/child.vue`,
+            children: [],
+          },
         ],
       },
     ])
@@ -64,8 +89,18 @@ describe('nuxt compatibility: generateRoutes from files', () => {
       `${pagesDir}/parent/[child].vue`,
       `${pagesDir}/parent-[child].vue`,
     ]), [
-      { name: 'parent-child', path: '/parent/:child()', file: `${pagesDir}/parent/[child].vue`, children: [] },
-      { name: 'parent-child', path: '/parent-:child()', file: `${pagesDir}/parent-[child].vue`, children: [] },
+      {
+        name: 'parent-child',
+        path: '/parent/:child()',
+        file: `${pagesDir}/parent/[child].vue`,
+        children: [],
+      },
+      {
+        name: 'parent-child',
+        path: '/parent-:child()',
+        file: `${pagesDir}/parent-[child].vue`,
+        children: [],
+      },
     ])
   })
 
@@ -74,8 +109,18 @@ describe('nuxt compatibility: generateRoutes from files', () => {
       `${pagesDir}/[...stories].vue`,
       `${pagesDir}/stories/[id].vue`,
     ]), [
-      { name: 'stories', path: '/:stories(.*)*', file: `${pagesDir}/[...stories].vue`, children: [] },
-      { name: 'stories-id', path: '/stories/:id()', file: `${pagesDir}/stories/[id].vue`, children: [] },
+      {
+        name: 'stories',
+        path: '/:stories(.*)*',
+        file: `${pagesDir}/[...stories].vue`,
+        children: [],
+      },
+      {
+        name: 'stories-id',
+        path: '/stories/:id()',
+        file: `${pagesDir}/stories/[id].vue`,
+        children: [],
+      },
     ])
   })
 
@@ -84,20 +129,40 @@ describe('nuxt compatibility: generateRoutes from files', () => {
       `${pagesDir}/stories/[id].vue`,
       `${pagesDir}/[...stories].vue`,
     ]), [
-      { name: 'stories-id', path: '/stories/:id()', file: `${pagesDir}/stories/[id].vue`, children: [] },
-      { name: 'stories', path: '/:stories(.*)*', file: `${pagesDir}/[...stories].vue`, children: [] },
+      {
+        name: 'stories-id',
+        path: '/stories/:id()',
+        file: `${pagesDir}/stories/[id].vue`,
+        children: [],
+      },
+      {
+        name: 'stories',
+        path: '/:stories(.*)*',
+        file: `${pagesDir}/[...stories].vue`,
+        children: [],
+      },
     ])
   })
 
   it('should generate correct route for snake_case file', () => {
     expectRoutes(generateRoutes([`${pagesDir}/snake_case.vue`]), [
-      { name: 'snake_case', path: '/snake_case', file: `${pagesDir}/snake_case.vue`, children: [] },
+      {
+        name: 'snake_case',
+        path: '/snake_case',
+        file: `${pagesDir}/snake_case.vue`,
+        children: [],
+      },
     ])
   })
 
   it('should generate correct route for kebab-case file', () => {
     expectRoutes(generateRoutes([`${pagesDir}/kebab-case.vue`]), [
-      { name: 'kebab-case', path: '/kebab-case', file: `${pagesDir}/kebab-case.vue`, children: [] },
+      {
+        name: 'kebab-case',
+        path: '/kebab-case',
+        file: `${pagesDir}/kebab-case.vue`,
+        children: [],
+      },
     ])
   })
 
@@ -135,7 +200,12 @@ describe('nuxt compatibility: generateRoutes from files', () => {
     expect(fooRoute).toBeDefined()
     expect(fooRoute!.file).toBe(`${pagesDir}/[[foo]]`)
     expect(fooRoute!.children).toEqual([
-      { name: 'foo', path: '', file: `${pagesDir}/[[foo]]/index.vue`, children: [] },
+      {
+        name: 'foo',
+        path: '',
+        file: `${pagesDir}/[[foo]]/index.vue`,
+        children: [],
+      },
     ])
     expect((fooRoute as any).name).toBeUndefined()
   })
@@ -146,13 +216,23 @@ describe('nuxt compatibility: generateRoutes from files', () => {
       `${pagesDir}/index.vue`,
       `${pagesDir}/[...slug]/[id].vue`,
     ]), [
-      { name: 'index', path: '/', file: `${pagesDir}/index.vue`, children: [] },
+      {
+        name: 'index',
+        path: '/',
+        file: `${pagesDir}/index.vue`,
+        children: [],
+      },
       {
         name: 'slug',
         path: '/:slug(.*)*',
         file: `${pagesDir}/[...slug].vue`,
         children: [
-          { name: 'slug-id', path: ':id()', file: `${pagesDir}/[...slug]/[id].vue`, children: [] },
+          {
+            name: 'slug-id',
+            path: ':id()',
+            file: `${pagesDir}/[...slug]/[id].vue`,
+            children: [],
+          },
         ],
       },
     ])
@@ -174,17 +254,47 @@ describe('nuxt compatibility: generateRoutes from files', () => {
       `${pagesDir}/[[c3@3c]].vue`,
       `${pagesDir}/[[d4-4d]].vue`,
     ]), [
-      { name: 'a1_1a', path: '/:a1_1a()', file: `${pagesDir}/[a1_1a].vue`, children: [] },
-      { name: 'b2.2b', path: '/:b2.2b()', file: `${pagesDir}/[b2.2b].vue`, children: [] },
-      { name: 'b2_2b', path: '/:b2()_:2b()', file: `${pagesDir}/[b2]_[2b].vue`, children: [] },
-      { name: 'c33c', path: '/:c33c?', file: `${pagesDir}/[[c3@3c]].vue`, children: [] },
-      { name: 'd44d', path: '/:d44d?', file: `${pagesDir}/[[d4-4d]].vue`, children: [] },
+      {
+        name: 'a1_1a',
+        path: '/:a1_1a()',
+        file: `${pagesDir}/[a1_1a].vue`,
+        children: [],
+      },
+      {
+        name: 'b2.2b',
+        path: '/:b2.2b()',
+        file: `${pagesDir}/[b2.2b].vue`,
+        children: [],
+      },
+      {
+        name: 'b2_2b',
+        path: '/:b2()_:2b()',
+        file: `${pagesDir}/[b2]_[2b].vue`,
+        children: [],
+      },
+      {
+        name: 'c33c',
+        path: '/:c33c?',
+        file: `${pagesDir}/[[c3@3c]].vue`,
+        children: [],
+      },
+      {
+        name: 'd44d',
+        path: '/:d44d?',
+        file: `${pagesDir}/[[d4-4d]].vue`,
+        children: [],
+      },
     ])
   })
 
   it('should allow pages with `:` in their path', () => {
     expectRoutes(generateRoutes([`${pagesDir}/test:name.vue`]), [
-      { name: 'test:name', path: '/test\\:name', file: `${pagesDir}/test:name.vue`, children: [] },
+      {
+        name: 'test:name',
+        path: '/test\\:name',
+        file: `${pagesDir}/test:name.vue`,
+        children: [],
+      },
     ])
   })
 
@@ -195,16 +305,31 @@ describe('nuxt compatibility: generateRoutes from files', () => {
       `${pagesDir}/\u6587\u6863/\u4ECB\u7ECD.vue`,
       `${pagesDir}/\u062E\u0627\u0635:\u062C\u062F\u064A\u062F.vue`,
     ]), [
-      { name: '\u6D4B\u8BD5', path: `/${encodeURIComponent('\u6D4B\u8BD5')}`, file: `${pagesDir}/\u6D4B\u8BD5.vue`, children: [] },
+      {
+        name: '\u6D4B\u8BD5',
+        path: `/${encodeURIComponent('\u6D4B\u8BD5')}`,
+        file: `${pagesDir}/\u6D4B\u8BD5.vue`,
+        children: [],
+      },
       {
         name: '\u6587\u6863',
         path: `/${encodeURIComponent('\u6587\u6863')}`,
         file: `${pagesDir}/\u6587\u6863.vue`,
         children: [
-          { name: '\u6587\u6863-\u4ECB\u7ECD', path: encodeURIComponent('\u4ECB\u7ECD'), file: `${pagesDir}/\u6587\u6863/\u4ECB\u7ECD.vue`, children: [] },
+          {
+            name: '\u6587\u6863-\u4ECB\u7ECD',
+            path: encodeURIComponent('\u4ECB\u7ECD'),
+            file: `${pagesDir}/\u6587\u6863/\u4ECB\u7ECD.vue`,
+            children: [],
+          },
         ],
       },
-      { name: '\u062E\u0627\u0635:\u062C\u062F\u064A\u062F', path: `/${encodeURIComponent('\u062E\u0627\u0635')}\\:${encodeURIComponent('\u062C\u062F\u064A\u062F')}`, file: `${pagesDir}/\u062E\u0627\u0635:\u062C\u062F\u064A\u062F.vue`, children: [] },
+      {
+        name: '\u062E\u0627\u0635:\u062C\u062F\u064A\u062F',
+        path: `/${encodeURIComponent('\u062E\u0627\u0635')}\\:${encodeURIComponent('\u062C\u062F\u064A\u062F')}`,
+        file: `${pagesDir}/\u062E\u0627\u0635:\u062C\u062F\u064A\u062F.vue`,
+        children: [],
+      },
     ])
   })
 
@@ -213,8 +338,18 @@ describe('nuxt compatibility: generateRoutes from files', () => {
       `${pagesDir}/a&b.vue`,
       `${pagesDir}/a\\b.vue`,
     ]), [
-      { name: 'a&b', path: '/a&b', file: `${pagesDir}/a&b.vue`, children: [] },
-      { name: 'a\\b', path: `/a${encodeURIComponent('\\')}b`, file: `${pagesDir}/a\\b.vue`, children: [] },
+      {
+        name: 'a&b',
+        path: '/a&b',
+        file: `${pagesDir}/a&b.vue`,
+        children: [],
+      },
+      {
+        name: 'a\\b',
+        path: `/a${encodeURIComponent('\\')}b`,
+        file: `${pagesDir}/a\\b.vue`,
+        children: [],
+      },
     ])
   })
 
@@ -223,8 +358,18 @@ describe('nuxt compatibility: generateRoutes from files', () => {
       `${pagesDir}/[[foo]].vue`,
       `${pagesDir}/[foo].vue`,
     ]), [
-      { name: 'foo', path: '/:foo()', file: `${pagesDir}/[foo].vue`, children: [] },
-      { name: 'foo', path: '/:foo?', file: `${pagesDir}/[[foo]].vue`, children: [] },
+      {
+        name: 'foo',
+        path: '/:foo()',
+        file: `${pagesDir}/[foo].vue`,
+        children: [],
+      },
+      {
+        name: 'foo',
+        path: '/:foo?',
+        file: `${pagesDir}/[[foo]].vue`,
+        children: [],
+      },
     ])
   })
 
@@ -247,19 +392,44 @@ describe('nuxt compatibility: generateRoutes from files', () => {
             path: '',
             file: `${layerDir}/param/index.vue`,
             children: [
-              { children: [], file: `${pagesDir}/param/index/index.vue`, name: 'param-index', path: '' },
-              { children: [], file: `${layerDir}/param/index/sibling.vue`, name: 'param-index-sibling', path: 'sibling' },
+              {
+                children: [],
+                file: `${pagesDir}/param/index/index.vue`,
+                name: 'param-index',
+                path: '',
+              },
+              {
+                children: [],
+                file: `${layerDir}/param/index/sibling.vue`,
+                name: 'param-index-sibling',
+                path: 'sibling',
+              },
             ],
           },
-          { children: [], file: `${pagesDir}/param/sibling.vue`, name: 'param-sibling', path: 'sibling' },
+          {
+            children: [],
+            file: `${pagesDir}/param/sibling.vue`,
+            name: 'param-sibling',
+            path: 'sibling',
+          },
         ],
       },
       {
         path: '/wrapper-expose/other',
         file: `${pagesDir}/wrapper-expose/other.vue`,
         children: [
-          { children: [], file: `${layerDir}/wrapper-expose/other/index.vue`, name: 'wrapper-expose-other', path: '' },
-          { children: [], file: `${pagesDir}/wrapper-expose/other/sibling.vue`, name: 'wrapper-expose-other-sibling', path: 'sibling' },
+          {
+            children: [],
+            file: `${layerDir}/wrapper-expose/other/index.vue`,
+            name: 'wrapper-expose-other',
+            path: '',
+          },
+          {
+            children: [],
+            file: `${pagesDir}/wrapper-expose/other/sibling.vue`,
+            name: 'wrapper-expose-other-sibling',
+            path: 'sibling',
+          },
         ],
       },
     ])
@@ -275,7 +445,12 @@ describe('nuxt compatibility: generateRoutes from files', () => {
         path: '/',
         file: `${pagesDir}/index/index.vue`,
         children: [
-          { children: [], file: `${pagesDir}/index/index/all.vue`, name: 'index-index-all', path: 'all' },
+          {
+            children: [],
+            file: `${pagesDir}/index/index/all.vue`,
+            name: 'index-index-all',
+            path: 'all',
+          },
         ],
       },
     ])
@@ -291,8 +466,18 @@ describe('nuxt compatibility: generateRoutes from files', () => {
         path: '/page1',
         file: `${pagesDir}/page1.vue`,
         children: [
-          { children: [], file: `${pagesDir}/page1/[id].vue`, name: 'page1-id', path: ':id()' },
-          { children: [], file: `${pagesDir}/page1/index.vue`, name: 'page1', path: '' },
+          {
+            children: [],
+            file: `${pagesDir}/page1/[id].vue`,
+            name: 'page1-id',
+            path: ':id()',
+          },
+          {
+            children: [],
+            file: `${pagesDir}/page1/index.vue`,
+            name: 'page1',
+            path: '',
+          },
         ],
       },
     ])
@@ -303,8 +488,18 @@ describe('nuxt compatibility: generateRoutes from files', () => {
       `${pagesDir}/[...id]/suffix.vue`,
       `${pagesDir}/[...id]/index.vue`,
     ]), [
-      { name: 'id', path: '/:id(.*)*', file: `${pagesDir}/[...id]/index.vue`, children: [] },
-      { name: 'id-suffix', path: '/:id([^/]*)*/suffix', file: `${pagesDir}/[...id]/suffix.vue`, children: [] },
+      {
+        name: 'id',
+        path: '/:id(.*)*',
+        file: `${pagesDir}/[...id]/index.vue`,
+        children: [],
+      },
+      {
+        name: 'id-suffix',
+        path: '/:id([^/]*)*/suffix',
+        file: `${pagesDir}/[...id]/suffix.vue`,
+        children: [],
+      },
     ])
   })
 
@@ -315,18 +510,38 @@ describe('nuxt compatibility: generateRoutes from files', () => {
       `${pagesDir}/(bar)/about/index.vue`,
       `${pagesDir}/(bar)/about/(foo)/index.vue`,
     ]), [
-      { name: 'index', path: '/', file: `${pagesDir}/(foo)/index.vue`, meta: { groups: ['foo'] }, children: [] },
+      {
+        name: 'index',
+        path: '/',
+        file: `${pagesDir}/(foo)/index.vue`,
+        meta: {
+          groups: ['foo'],
+        },
+        children: [],
+      },
       {
         path: '/about',
         file: `${pagesDir}/(foo)/about.vue`,
-        meta: { groups: ['foo'] },
+        meta: {
+          groups: ['foo'],
+        },
         children: [
           {
             path: '',
             file: `${pagesDir}/(bar)/about/index.vue`,
-            meta: { groups: ['bar'] },
+            meta: {
+              groups: ['bar'],
+            },
             children: [
-              { name: 'about', path: '', file: `${pagesDir}/(bar)/about/(foo)/index.vue`, meta: { groups: ['bar', 'foo'] }, children: [] },
+              {
+                name: 'about',
+                path: '',
+                file: `${pagesDir}/(bar)/about/(foo)/index.vue`,
+                meta: {
+                  groups: ['bar', 'foo'],
+                },
+                children: [],
+              },
             ],
           },
         ],

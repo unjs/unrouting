@@ -59,7 +59,9 @@ const tree = buildTree([
   'pages/users/[id].vue',
   'pages/users.vue',
   'pages/[...slug].vue',
-], { roots: ['pages/'] })
+], {
+  roots: ['pages/']
+})
 
 const routes = toVueRouter4(tree)
 // [
@@ -127,7 +129,10 @@ The route tree is mutable. Instead of rebuilding everything when a file changes,
 ```js
 import { addFile, buildTree, removeFile, toVueRouter4 } from 'unrouting'
 
-const opts = { roots: ['pages/'], extensions: ['.vue'] }
+const opts = {
+  roots: ['pages/'],
+  extensions: ['.vue']
+}
 
 // Build once at startup
 const tree = buildTree(initialFiles, opts)
@@ -484,7 +489,10 @@ Returns a callable with the same signature as `parsePath` (minus the options arg
 ```js
 import { addFile, buildTree, compileParsePath, toVueRouter4 } from 'unrouting'
 
-const opts = { roots: ['pages/'], modes: ['client', 'server'] }
+const opts = {
+  roots: ['pages/'],
+  modes: ['client', 'server']
+}
 
 // Compile once at startup
 const parse = compileParsePath(opts)
