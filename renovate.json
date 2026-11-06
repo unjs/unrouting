@@ -5,7 +5,7 @@
   ],
   "packageRules": [
     {
-      "matchPackageNames": ["rou3-v0"],
+      "matchDepNames": ["rou3-v0"],
       "enabled": false
     }
   ]
