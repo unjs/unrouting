@@ -70,9 +70,15 @@ describe('parsing vue file paths', () => {
     ])
     const [result] = parsePath(['b/[id]/[[...slug]].vue'])
     expect(result.segments).toEqual([
-      [{ type: 'static', value: 'b' }],
-      [{ type: 'dynamic', value: 'id' }],
-      [{ type: 'catchall', value: 'slug' }],
+      [
+        { type: 'static', value: 'b' },
+      ],
+      [
+        { type: 'dynamic', value: 'id' },
+      ],
+      [
+        { type: 'catchall', value: 'slug' },
+      ],
     ])
   })
 
@@ -81,10 +87,12 @@ describe('parsing vue file paths', () => {
     expect(pure.segments[0]).toEqual([
       { type: 'group', value: 'group' },
     ])
-    expect(mixed.segments).toEqual([[
-      { type: 'group', value: 'group' },
-      { type: 'dynamic', value: 'slug' },
-    ]])
+    expect(mixed.segments).toEqual([
+      [
+        { type: 'group', value: 'group' },
+        { type: 'dynamic', value: 'slug' },
+      ],
+    ])
   })
 
   it('should handle mixed static and dynamic content', () => {
@@ -155,17 +163,25 @@ describe('parsing vue file paths', () => {
   it('should handle parseSegment function directly', () => {
     // Test parseSegment with a simple segment
     const result1 = parseSegment('simple')
-    expect(result1).toEqual([{ type: 'static', value: 'simple' }])
+    expect(result1).toEqual([
+      { type: 'static', value: 'simple' },
+    ])
 
     // Test parseSegment with dynamic content
     const result2 = parseSegment('[param]')
-    expect(result2).toEqual([{ type: 'dynamic', value: 'param' }])
+    expect(result2).toEqual([
+      { type: 'dynamic', value: 'param' },
+    ])
 
     // Test parseSegment with empty segment
     const result3 = parseSegment('')
-    expect(result3).toEqual([{ type: 'static', value: '' }])
+    expect(result3).toEqual([
+      { type: 'static', value: '' },
+    ])
     const result4 = parseSegment('index')
-    expect(result4).toEqual([{ type: 'static', value: '' }])
+    expect(result4).toEqual([
+      { type: 'static', value: '' },
+    ])
   })
 
   it('works', () => {
@@ -511,64 +527,114 @@ describe('parsing vue file paths', () => {
 
 describe('parseFile function', () => {
   it('detects server mode when configured', () => {
-    const result = parsePath(['app.server.vue'], { modes: ['server', 'client'] })
+    const result = parsePath(['app.server.vue'], {
+      modes: ['server', 'client'],
+    })
     expect(result[0].meta?.modes).toEqual(['server'])
-    expect(result[0].segments).toEqual([[{ type: 'static', value: 'app' }]])
+    expect(result[0].segments).toEqual([
+      [
+        { type: 'static', value: 'app' },
+      ],
+    ])
   })
 
   it('detects client mode when configured', () => {
-    const result = parsePath(['app.client.vue'], { modes: ['server', 'client'] })
+    const result = parsePath(['app.client.vue'], {
+      modes: ['server', 'client'],
+    })
     expect(result[0].meta?.modes).toEqual(['client'])
-    expect(result[0].segments).toEqual([[{ type: 'static', value: 'app' }]])
+    expect(result[0].segments).toEqual([
+      [
+        { type: 'static', value: 'app' },
+      ],
+    ])
   })
 
   it('has no modes for regular files', () => {
     const result = parsePath(['app.vue'])
     expect(result[0].meta?.modes).toBeUndefined()
-    expect(result[0].segments).toEqual([[{ type: 'static', value: 'app' }]])
+    expect(result[0].segments).toEqual([
+      [
+        { type: 'static', value: 'app' },
+      ],
+    ])
   })
 
   it('ignores mode-like extensions without configuration', () => {
     const result = parsePath(['app.server.vue'])
     expect(result[0].meta?.modes).toBeUndefined()
-    expect(result[0].segments).toEqual([[{ type: 'static', value: 'app.server' }]])
+    expect(result[0].segments).toEqual([
+      [
+        { type: 'static', value: 'app.server' },
+      ],
+    ])
   })
 
   it('detects multiple modes in correct order', () => {
-    const result = parsePath(['app.client.vapor.vue'], { modes: ['client', 'server', 'vapor'] })
+    const result = parsePath(['app.client.vapor.vue'], {
+      modes: ['client', 'server', 'vapor'],
+    })
     expect(result[0].meta?.modes).toEqual(['client', 'vapor'])
-    expect(result[0].segments).toEqual([[{ type: 'static', value: 'app' }]])
+    expect(result[0].segments).toEqual([
+      [
+        { type: 'static', value: 'app' },
+      ],
+    ])
   })
 
   it('detects custom modes', () => {
-    const result = parsePath(['app.mobile.vue'], { modes: ['mobile', 'desktop'] })
+    const result = parsePath(['app.mobile.vue'], {
+      modes: ['mobile', 'desktop'],
+    })
     expect(result[0].meta?.modes).toEqual(['mobile'])
-    expect(result[0].segments).toEqual([[{ type: 'static', value: 'app' }]])
+    expect(result[0].segments).toEqual([
+      [
+        { type: 'static', value: 'app' },
+      ],
+    ])
   })
 
   it('detects multiple custom modes', () => {
-    const result = parsePath(['admin.desktop.dark.vue'], { modes: ['mobile', 'desktop', 'dark', 'light'] })
+    const result = parsePath(['admin.desktop.dark.vue'], {
+      modes: ['mobile', 'desktop', 'dark', 'light'],
+    })
     expect(result[0].meta?.modes).toEqual(['desktop', 'dark'])
-    expect(result[0].segments).toEqual([[{ type: 'static', value: 'admin' }]])
+    expect(result[0].segments).toEqual([
+      [
+        { type: 'static', value: 'admin' },
+      ],
+    ])
   })
 
   it('ignores unknown modes', () => {
-    const result = parsePath(['app.unknown.vue'], { modes: ['client', 'server'] })
+    const result = parsePath(['app.unknown.vue'], {
+      modes: ['client', 'server'],
+    })
     expect(result[0].meta?.modes).toBeUndefined()
-    expect(result[0].segments).toEqual([[{ type: 'static', value: 'app.unknown' }]])
+    expect(result[0].segments).toEqual([
+      [
+        { type: 'static', value: 'app.unknown' },
+      ],
+    ])
   })
 
   it('works with empty modes array', () => {
     const result = parsePath(['app.client.vue'], { modes: [] })
     expect(result[0].meta?.modes).toBeUndefined()
-    expect(result[0].segments).toEqual([[{ type: 'static', value: 'app.client' }]])
+    expect(result[0].segments).toEqual([
+      [
+        { type: 'static', value: 'app.client' },
+      ],
+    ])
   })
 })
 
 describe('group segments', () => {
   it('parses group segments', () => {
     const result = parseSegment('(group)')
-    expect(result).toEqual([{ type: 'group', value: 'group' }])
+    expect(result).toEqual([
+      { type: 'group', value: 'group' },
+    ])
   })
 
   it('parses mixed group and dynamic segments', () => {
@@ -590,19 +656,31 @@ describe('group segments', () => {
 
 describe('multiple extensions support', () => {
   it('handles custom extensions', () => {
-    expect(parsePath(['api/users.json'], { extensions: ['.vue', '.json'] })[0]).toMatchObject({
+    expect(parsePath(['api/users.json'], {
+      extensions: ['.vue', '.json'],
+    })[0]).toMatchObject({
       segments: [
-        [{ type: 'static', value: 'api' }],
-        [{ type: 'static', value: 'users' }],
+        [
+          { type: 'static', value: 'api' },
+        ],
+        [
+          { type: 'static', value: 'users' },
+        ],
       ],
     })
   })
 
   it('preserves extensions not in allow list', () => {
-    expect(parsePath(['api/users.xml'], { extensions: ['.vue', '.json'] })[0]).toMatchObject({
+    expect(parsePath(['api/users.xml'], {
+      extensions: ['.vue', '.json'],
+    })[0]).toMatchObject({
       segments: [
-        [{ type: 'static', value: 'api' }],
-        [{ type: 'static', value: 'users.xml' }],
+        [
+          { type: 'static', value: 'api' },
+        ],
+        [
+          { type: 'static', value: 'users.xml' },
+        ],
       ],
     })
   })
@@ -610,8 +688,12 @@ describe('multiple extensions support', () => {
   it('strips all extensions when no extensions specified', () => {
     expect(parsePath(['api/users.xml'])[0]).toMatchObject({
       segments: [
-        [{ type: 'static', value: 'api' }],
-        [{ type: 'static', value: 'users' }],
+        [
+          { type: 'static', value: 'api' },
+        ],
+        [
+          { type: 'static', value: 'users' },
+        ],
       ],
     })
   })
@@ -619,17 +701,27 @@ describe('multiple extensions support', () => {
 describe('roots', () => {
   it('should strip single root from file paths', () => {
     const filePaths = ['src/pages/index.vue', 'src/pages/about.vue']
-    const result = parsePath(filePaths, { roots: ['src/pages'] })
+    const result = parsePath(filePaths, {
+      roots: ['src/pages'],
+    })
 
     expect(result).toEqual([
       {
         file: 'src/pages/index.vue',
-        segments: [[{ type: 'static', value: '' }]],
+        segments: [
+          [
+            { type: 'static', value: '' },
+          ],
+        ],
         meta: undefined,
       },
       {
         file: 'src/pages/about.vue',
-        segments: [[{ type: 'static', value: 'about' }]],
+        segments: [
+          [
+            { type: 'static', value: 'about' },
+          ],
+        ],
         meta: undefined,
       },
     ])
@@ -644,7 +736,11 @@ describe('roots', () => {
     expect(result).toEqual([
       {
         file: 'src/pages/admin/users.vue',
-        segments: [[{ type: 'static', value: 'users' }]],
+        segments: [
+          [
+            { type: 'static', value: 'users' },
+          ],
+        ],
         meta: undefined,
       },
     ])
@@ -653,12 +749,18 @@ describe('roots', () => {
   it('should handle exact path matches', () => {
     // Test exact directory match with trailing slash
     const filePaths = ['src/pages/']
-    const result = parsePath(filePaths, { roots: ['src/pages'] })
+    const result = parsePath(filePaths, {
+      roots: ['src/pages'],
+    })
 
     expect(result).toEqual([
       {
         file: 'src/pages/',
-        segments: [[{ type: 'static', value: '' }]],
+        segments: [
+          [
+            { type: 'static', value: '' },
+          ],
+        ],
         meta: undefined,
       },
     ])
@@ -666,15 +768,23 @@ describe('roots', () => {
 
   it('should not strip if no matching root', () => {
     const filePaths = ['other/pages/index.vue']
-    const result = parsePath(filePaths, { roots: ['src/pages'] })
+    const result = parsePath(filePaths, {
+      roots: ['src/pages'],
+    })
 
     expect(result).toEqual([
       {
         file: 'other/pages/index.vue',
         segments: [
-          [{ type: 'static', value: 'other' }],
-          [{ type: 'static', value: 'pages' }],
-          [{ type: 'static', value: '' }],
+          [
+            { type: 'static', value: 'other' },
+          ],
+          [
+            { type: 'static', value: 'pages' },
+          ],
+          [
+            { type: 'static', value: '' },
+          ],
         ],
         meta: undefined,
       },
@@ -689,9 +799,15 @@ describe('roots', () => {
       {
         file: 'src/pages/index.vue',
         segments: [
-          [{ type: 'static', value: 'src' }],
-          [{ type: 'static', value: 'pages' }],
-          [{ type: 'static', value: '' }],
+          [
+            { type: 'static', value: 'src' },
+          ],
+          [
+            { type: 'static', value: 'pages' },
+          ],
+          [
+            { type: 'static', value: '' },
+          ],
         ],
         meta: undefined,
       },
@@ -700,12 +816,18 @@ describe('roots', () => {
 
   it('should handle roots with trailing slashes', () => {
     const filePaths = ['src/pages/index.vue']
-    const result = parsePath(filePaths, { roots: ['src/pages/'] })
+    const result = parsePath(filePaths, {
+      roots: ['src/pages/'],
+    })
 
     expect(result).toEqual([
       {
         file: 'src/pages/index.vue',
-        segments: [[{ type: 'static', value: '' }]],
+        segments: [
+          [
+            { type: 'static', value: '' },
+          ],
+        ],
         meta: undefined,
       },
     ])
@@ -713,14 +835,20 @@ describe('roots', () => {
 
   it('should work with complex dynamic paths after root stripping', () => {
     const filePaths = ['src/pages/[slug]/[...rest].vue']
-    const result = parsePath(filePaths, { roots: ['src/pages'] })
+    const result = parsePath(filePaths, {
+      roots: ['src/pages'],
+    })
 
     expect(result).toEqual([
       {
         file: 'src/pages/[slug]/[...rest].vue',
         segments: [
-          [{ type: 'dynamic', value: 'slug' }],
-          [{ type: 'catchall', value: 'rest' }],
+          [
+            { type: 'dynamic', value: 'slug' },
+          ],
+          [
+            { type: 'catchall', value: 'rest' },
+          ],
         ],
         meta: undefined,
       },
@@ -738,31 +866,49 @@ describe('roots', () => {
     expect(result).toEqual([
       {
         file: 'src/pages/index.client.vue',
-        segments: [[{ type: 'static', value: '' }]],
-        meta: { modes: ['client'] },
+        segments: [
+          [
+            { type: 'static', value: '' },
+          ],
+        ],
+        meta: {
+          modes: ['client'],
+        },
       },
     ])
   })
 
   it('should treat leading @ as literal path character, not named view', () => {
-    const result = parsePath(['pages/@admin.vue'], { roots: ['pages/'] })
+    const result = parsePath(['pages/@admin.vue'], {
+      roots: ['pages/'],
+    })
     expect(result).toEqual([
       {
         file: 'pages/@admin.vue',
-        segments: [[{ type: 'static', value: '@admin' }]],
+        segments: [
+          [
+            { type: 'static', value: '@admin' },
+          ],
+        ],
         meta: undefined,
       },
     ])
   })
 
   it('should treat leading @ as literal in nested paths', () => {
-    const result = parsePath(['pages/@admin/index.vue'], { roots: ['pages/'] })
+    const result = parsePath(['pages/@admin/index.vue'], {
+      roots: ['pages/'],
+    })
     expect(result).toEqual([
       {
         file: 'pages/@admin/index.vue',
         segments: [
-          [{ type: 'static', value: '@admin' }],
-          [{ type: 'static', value: '' }],
+          [
+            { type: 'static', value: '@admin' },
+          ],
+          [
+            { type: 'static', value: '' },
+          ],
         ],
         meta: undefined,
       },
@@ -771,12 +917,18 @@ describe('roots', () => {
 
   it('should handle empty path with named view after root stripping', () => {
     const filePaths = ['src/pages/index@sidebar.vue']
-    const result = parsePath(filePaths, { roots: ['src/pages'] })
+    const result = parsePath(filePaths, {
+      roots: ['src/pages'],
+    })
 
     expect(result).toEqual([
       {
         file: 'src/pages/index@sidebar.vue',
-        segments: [[{ type: 'static', value: '' }]],
+        segments: [
+          [
+            { type: 'static', value: '' },
+          ],
+        ],
         meta: { name: 'sidebar' },
       },
     ])
@@ -792,8 +944,15 @@ describe('roots', () => {
     expect(result).toEqual([
       {
         file: 'src/pages/index@sidebar.client.vue',
-        segments: [[{ type: 'static', value: '' }]],
-        meta: { modes: ['client'], name: 'sidebar' },
+        segments: [
+          [
+            { type: 'static', value: '' },
+          ],
+        ],
+        meta: {
+          modes: ['client'],
+          name: 'sidebar',
+        },
       },
     ])
   })

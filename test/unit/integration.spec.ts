@@ -9,12 +9,32 @@ describe('nuxt routing', () => {
     'admin/settings/profile/index.vue': '/admin/settings/profile',
   }
   const _dynamicExamples = {
-    'user/[userId].vue': [[{ userId: 'foo' }, '/user/foo']],
-    'post/[slug].vue': [[{ slug: 'foo' }, '/post/foo']],
+    'user/[userId].vue': [
+      [
+        { userId: 'foo' },
+        '/user/foo',
+      ],
+    ],
+    'post/[slug].vue': [
+      [
+        { slug: 'foo' },
+        '/post/foo',
+      ],
+    ],
     'post/[...slug].vue': [
       [{}, '/post'],
-      [{ slug: ['foo'] }, '/post/foo'],
-      [{ slug: ['foo', 'bar'] }, '/post/foo/bar'],
+      [
+        {
+          slug: ['foo'],
+        },
+        '/post/foo',
+      ],
+      [
+        {
+          slug: ['foo', 'bar'],
+        },
+        '/post/foo/bar',
+      ],
     ],
   }
   it.todo('should parse examples', () => {
@@ -28,7 +48,12 @@ describe('sveltekit routing', () => {
     'admin/+page.svelte': '/admin',
   }
   const _dynamicExamples = {
-    'blog/[slug]/+page.svelte': [[{ slug: 'foo' }, '/blog/foo']],
+    'blog/[slug]/+page.svelte': [
+      [
+        { slug: 'foo' },
+        '/blog/foo',
+      ],
+    ],
   }
   it.todo('should serialise examples to routes', () => {})
 })
@@ -43,12 +68,32 @@ describe('next.js app directory routing', () => {
     'app/admin/settings/profile/page.tsx': '/admin/settings/profile',
   }
   const _dynamicExamples = {
-    'app/user/[userId]/page.tsx': [[{ userId: 'foo' }, '/user/foo']],
-    'app/post/[slug]/page.tsx': [[{ slug: 'foo' }, '/post/foo']],
+    'app/user/[userId]/page.tsx': [
+      [
+        { userId: 'foo' },
+        '/user/foo',
+      ],
+    ],
+    'app/post/[slug]/page.tsx': [
+      [
+        { slug: 'foo' },
+        '/post/foo',
+      ],
+    ],
     'app/post/[...slug]/page.tsx': [
       [{}, '/post'],
-      [{ slug: ['foo'] }, '/post/foo'],
-      [{ slug: ['foo', 'bar'] }, '/post/foo/bar'],
+      [
+        {
+          slug: ['foo'],
+        },
+        '/post/foo',
+      ],
+      [
+        {
+          slug: ['foo', 'bar'],
+        },
+        '/post/foo/bar',
+      ],
     ],
   }
   it.todo('should parse examples', () => {})

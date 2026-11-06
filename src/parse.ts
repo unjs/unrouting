@@ -50,7 +50,9 @@ export function parsePath(filePaths: string[], options: ParsePathOptions = {}): 
     ? new RegExp(`\\.(${options.extensions.map(ext => ext.replace(/^\./, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`)
     : DEFAULT_EXT_RE
 
-  const sortedRoots = [...options.roots || []].sort((a, b) => b.length - a.length)
+  const sortedRoots = [
+    ...options.roots || [],
+  ].sort((a, b) => b.length - a.length)
   const PREFIX_RE = sortedRoots.length > 0
     ? new RegExp(`^(?:${sortedRoots.map(root => escapeStringRegexp(withTrailingSlash(root))).join('|')})`)
     : undefined
@@ -84,7 +86,9 @@ export function compileParsePath(options: ParsePathOptions = {}): CompiledParseP
     ? new RegExp(`\\.(${options.extensions.map(ext => ext.replace(/^\./, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`)
     : DEFAULT_EXT_RE
 
-  const sortedRoots = [...options.roots || []].sort((a, b) => b.length - a.length)
+  const sortedRoots = [
+    ...options.roots || [],
+  ].sort((a, b) => b.length - a.length)
   const PREFIX_RE = sortedRoots.length > 0
     ? new RegExp(`^(?:${sortedRoots.map(root => escapeStringRegexp(withTrailingSlash(root))).join('|')})`)
     : undefined
@@ -137,7 +141,9 @@ function parsePathInner(
 
     // withoutTrailingSlash('') returns '/', withoutLeadingSlash('/') returns '/'
     const normalized = withoutLeadingSlash(withoutTrailingSlash(filePath))
-    const segments = normalized === '/' ? [''] : normalized.split('/')
+    const segments = normalized === '/'
+      ? ['']
+      : normalized.split('/')
 
     const hasModes = modes.length > 0
     const hasMeta = hasModes || !!namedView
@@ -147,8 +153,12 @@ function parsePathInner(
       segments: segments.map(s => parseSegment(s, originalFilePath, warn)),
       meta: hasMeta
         ? {
-            ...(hasModes ? { modes } : undefined),
-            ...(namedView ? { name: namedView } : undefined),
+            ...(hasModes
+              ? { modes }
+              : undefined),
+            ...(namedView
+              ? { name: namedView }
+              : undefined),
           }
         : undefined,
     })
@@ -161,8 +171,11 @@ function parsePathInner(
 const PARAM_CHAR_RE = /[\w.]/
 
 export function parseSegment(segment: string, absolutePath?: string, warn?: (message: string) => void): ParsedPathSegmentToken[] {
-  if (segment === '')
-    return [{ type: 'static', value: '' }]
+  if (segment === '') {
+    return [
+      { type: 'static', value: '' },
+    ]
+  }
 
   type State = 'initial' | SegmentType
   let state: State = 'initial'
@@ -226,7 +239,9 @@ export function parseSegment(segment: string, absolutePath?: string, warn?: (mes
 
           if (segment[i + 1] === '+') {
             tokens.push({
-              type: state === 'optional' ? 'optional-repeatable' : 'repeatable',
+              type: state === 'optional'
+                ? 'optional-repeatable'
+                : 'repeatable',
               value: buffer,
             })
             buffer = ''

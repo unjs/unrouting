@@ -158,10 +158,16 @@ describe('rou3 support', () => {
       expect(findRoute(router, 'GET', example)?.data.value).toBe(file)
     }
 
-    const t = buildTree([{
-      file: 'static.vue',
-      segments: [[{ type: 'static', value: 'test(name)' }]],
-    }] as any)
+    const t = buildTree([
+      {
+        file: 'static.vue',
+        segments: [
+          [
+            { type: 'static', value: 'test(name)' },
+          ],
+        ],
+      },
+    ] as any)
     const pattern = toRou3(t)[0].path
     const router = createRouter<{ value: string }>()
     expect(pattern).toBe('/test\\(name\\)')
@@ -171,12 +177,30 @@ describe('rou3 support', () => {
 
   it('escapes static punctuation in mixed rou3 pattern segments', () => {
     const cases = {
-      'file:[slug].vue': ['/file:x', { slug: 'x' }],
-      'file+[slug].vue': ['/file+x', { slug: 'x' }],
-      'pre*[slug].vue': ['/pre*x', { slug: 'x' }],
-      'café-[slug].vue': ['/caf%C3%A9-x', { slug: 'x' }],
-      '[slug]abc.vue': ['/xabc', { slug: 'x' }],
-      '[b2]_[2b].vue': ['/fi_le', { b2: 'fi', _2b: 'le' }],
+      'file:[slug].vue': [
+        '/file:x',
+        { slug: 'x' },
+      ],
+      'file+[slug].vue': [
+        '/file+x',
+        { slug: 'x' },
+      ],
+      'pre*[slug].vue': [
+        '/pre*x',
+        { slug: 'x' },
+      ],
+      'café-[slug].vue': [
+        '/caf%C3%A9-x',
+        { slug: 'x' },
+      ],
+      '[slug]abc.vue': [
+        '/xabc',
+        { slug: 'x' },
+      ],
+      '[b2]_[2b].vue': [
+        '/fi_le',
+        { b2: 'fi', _2b: 'le' },
+      ],
     }
 
     for (const [file, [example, params]] of Object.entries(cases)) {
@@ -220,22 +244,32 @@ describe('rou3 support', () => {
   })
 
   it('should name dynamic tokens without a name', () => {
-    const t = buildTree([{
-      file: 'unnamed.vue',
-      segments: [[{ type: 'dynamic', value: '' }]],
-    }] as any)
+    const t = buildTree([
+      {
+        file: 'unnamed.vue',
+        segments: [
+          [
+            { type: 'dynamic', value: '' },
+          ],
+        ],
+      },
+    ] as any)
     expect(toRou3(t)[0].path).toEqual('/:_')
   })
 
   it('should name unnamed dynamic tokens inside a single segment', () => {
-    const t = buildTree([{
-      file: 'unnamed.vue',
-      segments: [[
-        { type: 'static', value: 'file-' },
-        { type: 'dynamic', value: '' },
-        { type: 'static', value: '.png' },
-      ]],
-    }] as any)
+    const t = buildTree([
+      {
+        file: 'unnamed.vue',
+        segments: [
+          [
+            { type: 'static', value: 'file-' },
+            { type: 'dynamic', value: '' },
+            { type: 'static', value: '.png' },
+          ],
+        ],
+      },
+    ] as any)
     const router = createRouter<{ value: string }>()
     const pattern = toRou3(t)[0].path
     addRoute(router, 'GET', pattern, { value: pattern })
@@ -246,18 +280,30 @@ describe('rou3 support', () => {
   })
 
   it('should name optional tokens without a name', () => {
-    const t = buildTree([{
-      file: 'unnamed.vue',
-      segments: [[{ type: 'optional', value: '' }]],
-    }] as any)
+    const t = buildTree([
+      {
+        file: 'unnamed.vue',
+        segments: [
+          [
+            { type: 'optional', value: '' },
+          ],
+        ],
+      },
+    ] as any)
     expect(toRou3(t)[0].path).toEqual('/:_?')
   })
 
   it('should name repeatable tokens without a name', () => {
-    const t = buildTree([{
-      file: 'unnamed.vue',
-      segments: [[{ type: 'repeatable', value: '' }]],
-    }] as any)
+    const t = buildTree([
+      {
+        file: 'unnamed.vue',
+        segments: [
+          [
+            { type: 'repeatable', value: '' },
+          ],
+        ],
+      },
+    ] as any)
     const router = createRouter<{ value: string }>()
     const pattern = toRou3(t)[0].path
     addRoute(router, 'GET', pattern, { value: pattern })
@@ -268,18 +314,30 @@ describe('rou3 support', () => {
   })
 
   it('should name catchall tokens without a name', () => {
-    const t = buildTree([{
-      file: 'unnamed.vue',
-      segments: [[{ type: 'catchall', value: '' }]],
-    }] as any)
+    const t = buildTree([
+      {
+        file: 'unnamed.vue',
+        segments: [
+          [
+            { type: 'catchall', value: '' },
+          ],
+        ],
+      },
+    ] as any)
     expect(toRou3(t)[0].path).toEqual('/:_*')
   })
 
   it('should name optional-repeatable tokens without a name', () => {
-    const t = buildTree([{
-      file: 'unnamed.vue',
-      segments: [[{ type: 'optional-repeatable', value: '' }]],
-    }] as any)
+    const t = buildTree([
+      {
+        file: 'unnamed.vue',
+        segments: [
+          [
+            { type: 'optional-repeatable', value: '' },
+          ],
+        ],
+      },
+    ] as any)
     expect(toRou3(t)[0].path).toEqual('/:_*')
   })
 
@@ -402,7 +460,9 @@ describe('vueRouterToRou3', () => {
         addRoute(router, 'GET', pattern, pattern)
         addRouteV0(routerV0, 'GET', pattern, pattern)
       }
-      const radix = toRouteMatcher(createRadixRouter({ routes: Object.fromEntries(patterns.map(pattern => [pattern, {}])) }))
+      const radix = toRouteMatcher(createRadixRouter({
+        routes: Object.fromEntries(patterns.map(pattern => [pattern, {}])),
+      }))
       for (const url of urls) {
         const expected = !!findRoute(router, 'GET', url)
         expect(!!findRouteV0(routerV0, 'GET', url), `${path} on ${url} (rou3 0.x)`).toBe(expected)
@@ -515,24 +575,64 @@ describe('vueRouterToRou3', () => {
   it('collapses catch-alls rou3 cannot represent', () => {
     const result = (path: string) => {
       const { patterns, issues } = vueRouterToRou3(path)
-      return { patterns, issues: issues.map(issue => issue.type) }
+      return {
+        patterns,
+        issues: issues.map(issue => issue.type),
+      }
     }
-    expect(result('/a/:x+/b/:y+')).toEqual({ patterns: ['/a/**'], issues: ['collapsed'] })
-    expect(result('/:x(.*)/:y*')).toEqual({ patterns: ['/**'], issues: ['collapsed'] })
-    expect(result('/:x(.*)-:y(.*)')).toEqual({ patterns: ['/**'], issues: ['collapsed'] })
-    expect(result('/a/pre-:x+')).toEqual({ patterns: ['/a/**'], issues: ['collapsed'] })
-    expect(result('/:a(de|fr)/pre-:x*')).toEqual({ patterns: ['/de/**', '/fr/**'], issues: ['collapsed'] })
+    expect(result('/a/:x+/b/:y+')).toEqual({
+      patterns: ['/a/**'],
+      issues: ['collapsed'],
+    })
+    expect(result('/:x(.*)/:y*')).toEqual({
+      patterns: ['/**'],
+      issues: ['collapsed'],
+    })
+    expect(result('/:x(.*)-:y(.*)')).toEqual({
+      patterns: ['/**'],
+      issues: ['collapsed'],
+    })
+    expect(result('/a/pre-:x+')).toEqual({
+      patterns: ['/a/**'],
+      issues: ['collapsed'],
+    })
+    expect(result('/:a(de|fr)/pre-:x*')).toEqual({
+      patterns: ['/de/**', '/fr/**'],
+      issues: ['collapsed'],
+    })
   })
 
   it('drops constraints rou3 cannot represent', () => {
     const result = (path: string) => {
       const { patterns, issues } = vueRouterToRou3(path)
-      return { patterns, issues: issues.map(issue => issue.type) }
+      return {
+        patterns,
+        issues: issues.map(issue => issue.type),
+      }
     }
-    expect(result('/:x([$^-]\\d+)')).toEqual({ patterns: ['/:x([$^-]\\d+)'], issues: [] })
-    expect(result('/:x([a\\]-]+)')).toEqual({ patterns: ['/:x([a\\]-]+)'], issues: [] })
-    for (const path of ['/:x(^a)', '/:x(a$)', '/:x((?!admin)\\w+)', '/:x((?:a))', '/:x(a\\1)', '/:x(\\k<n>)', '/:x([a--b])', '/:x([a&&b])'])
-      expect(result(path), path).toEqual({ patterns: ['/:x'], issues: ['dropped-regexp'] })
+    expect(result('/:x([$^-]\\d+)')).toEqual({
+      patterns: ['/:x([$^-]\\d+)'],
+      issues: [],
+    })
+    expect(result('/:x([a\\]-]+)')).toEqual({
+      patterns: ['/:x([a\\]-]+)'],
+      issues: [],
+    })
+    for (const path of [
+      '/:x(^a)',
+      '/:x(a$)',
+      '/:x((?!admin)\\w+)',
+      '/:x((?:a))',
+      '/:x(a\\1)',
+      '/:x(\\k<n>)',
+      '/:x([a--b])',
+      '/:x([a&&b])',
+    ]) {
+      expect(result(path), path).toEqual({
+        patterns: ['/:x'],
+        issues: ['dropped-regexp'],
+      })
+    }
   })
 
   describe('rou3 compatibility', () => {
@@ -616,13 +716,21 @@ describe('vueRouterToRou3', () => {
     function vueRouterMatches(path: string, url: string): boolean {
       const router = createVueRouter({
         history: createMemoryHistory(),
-        routes: [{ path, component: () => ({}) }],
+        routes: [
+          {
+            path,
+            component: () => ({}),
+          },
+        ],
         sensitive: true,
       })
       return router.resolve(url).matched.length > 0
     }
 
-    for (const options of [{}, { collapse: true }]) {
+    for (const options of [
+      {},
+      { collapse: true },
+    ]) {
       it(`${options.collapse ? 'collapsed' : 'faithful'} patterns are valid rou3 routes matching what Vue Router matches, or more when an issue is reported`, () => {
         for (const path of vueRouterPaths) {
           const { patterns, issues } = vueRouterToRou3(path, options)
@@ -643,13 +751,38 @@ describe('vueRouterToRou3', () => {
     }
 
     it('accepts every page route emitted by toVueRouter4', () => {
-      const files = ['index.vue', '[id].vue', 'users/[[id]].vue', 'users/[id]/edit.vue', '[...slug].vue', 'docs/[...slug]/edit.vue', '[[locale]]/[id].vue', 'prefix-[slug]-suffix.vue', 'repeat/[slug]+.vue', 'optional-repeat/[[slug]]+.vue', 'opt/pre-[[opt]].vue', 'opt/[[opt]]-post.vue', '[a]-[b].vue', '[b2]_[2b].vue', '[slug]abc.vue', 'dup/[id]/[id].vue']
+      const files = [
+        'index.vue',
+        '[id].vue',
+        'users/[[id]].vue',
+        'users/[id]/edit.vue',
+        '[...slug].vue',
+        'docs/[...slug]/edit.vue',
+        '[[locale]]/[id].vue',
+        'prefix-[slug]-suffix.vue',
+        'repeat/[slug]+.vue',
+        'optional-repeat/[[slug]]+.vue',
+        'opt/pre-[[opt]].vue',
+        'opt/[[opt]]-post.vue',
+        '[a]-[b].vue',
+        '[b2]_[2b].vue',
+        '[slug]abc.vue',
+        'dup/[id]/[id].vue',
+      ]
       const collect = (routes: ReturnType<typeof toVueRouter4>, prefix = ''): string[] => routes.flatMap((route) => {
-        const path = route.path.startsWith('/') ? route.path : `${prefix}/${route.path}`
-        return [path, ...collect(route.children, path)]
+        const path = route.path.startsWith('/')
+          ? route.path
+          : `${prefix}/${route.path}`
+        return [
+          path,
+          ...collect(route.children, path),
+        ]
       })
       for (const path of collect(toVueRouter4(tree(files)))) {
-        for (const options of [{}, { collapse: true }]) {
+        for (const options of [
+          {},
+          { collapse: true },
+        ]) {
           const router = createRouter()
           for (const pattern of vueRouterToRou3(path, options).patterns)
             expect(() => addRoute(router, 'GET', pattern, pattern), `${path} -> ${pattern}`).not.toThrow()
@@ -688,10 +821,13 @@ describe('regexp support', () => {
     const result = Object.fromEntries(Object.entries(paths).map(([path, example]) => {
       const regexpResult = toRegExp(tree([path]))[0]
       const match = example.match(regexpResult.pattern)
-      return [path, {
-        regexp: regexpResult.pattern.toString(),
-        result: match?.groups || match?.[0],
-      }]
+      return [
+        path,
+        {
+          regexp: regexpResult.pattern.toString(),
+          result: match?.groups || match?.[0],
+        },
+      ]
     }))
     expect(result).toMatchInlineSnapshot(`
       {
@@ -847,13 +983,15 @@ describe('vue-router support', () => {
       const { name, path: routePath, children } = toVueRouter4(tree([path]))[0]
       const router = createVueRouter({
         history: createMemoryHistory(),
-        routes: [{
-          name,
-          path: routePath,
-          children: children as any,
-          component: () => ({}),
-          meta: { value: example },
-        }],
+        routes: [
+          {
+            name,
+            path: routePath,
+            children: children as any,
+            component: () => ({}),
+            meta: { value: example },
+          },
+        ],
       })
       const resolved = router.resolve(example)
       return [path, resolved?.meta.value && resolved.params]
@@ -961,19 +1099,35 @@ describe('vue-router support', () => {
     const resolve = (file: string, path: string) => {
       const router = createVueRouter({
         history: createMemoryHistory(),
-        routes: [{ path: toVueRouter4(tree([file]))[0].path, component: () => ({}) }],
+        routes: [
+          {
+            path: toVueRouter4(tree([file]))[0].path,
+            component: () => ({}),
+          },
+        ],
       })
       const resolved = router.resolve(path)
       return resolved.matched.length ? resolved.params : undefined
     }
 
-    expect(resolve('foo[...id]bar.vue', '/fooa/b/cbar')).toEqual({ id: ['a', 'b', 'c'] })
-    expect(resolve('foo[...id]bar.vue', '/foo/x/bar')).toEqual({ id: ['', 'x', ''] })
+    expect(resolve('foo[...id]bar.vue', '/fooa/b/cbar')).toEqual({
+      id: ['a', 'b', 'c'],
+    })
+    expect(resolve('foo[...id]bar.vue', '/foo/x/bar')).toEqual({
+      id: ['', 'x', ''],
+    })
     expect(resolve('foo[...id]bar.vue', '/foobar')).toEqual({})
-    expect(resolve('a/[...slug]-x.vue', '/a/b/c-x')).toEqual({ slug: ['b', 'c'] })
+    expect(resolve('a/[...slug]-x.vue', '/a/b/c-x')).toEqual({
+      slug: ['b', 'c'],
+    })
 
     const start = performance.now()
-    for (const file of ['foo[...id]bar.vue', '[...id]bar.vue', 'foo[[...id]]bar.vue', 'a/[...slug]-x.vue'])
+    for (const file of [
+      'foo[...id]bar.vue',
+      '[...id]bar.vue',
+      'foo[[...id]]bar.vue',
+      'a/[...slug]-x.vue',
+    ])
       expect(resolve(file, `/foo${'/'.repeat(5000)}x`)).toBeUndefined()
     expect(performance.now() - start).toBeLessThan(1000)
   })
@@ -1106,7 +1260,9 @@ describe('buildTree duplicate strategies', () => {
   })
 
   it('allows same path with different modes', () => {
-    const t = buildTree(parsePath(['a.client.vue', 'a.server.vue'], { modes: ['client', 'server'] }))
+    const t = buildTree(parsePath(['a.client.vue', 'a.server.vue'], {
+      modes: ['client', 'server'],
+    }))
     const node = t.root.children.get('a')!
     expect(node.files).toHaveLength(2)
     expect(node.files[0].modes).toEqual(['client'])
@@ -1131,10 +1287,16 @@ describe('buildTree duplicate strategies', () => {
 
   it('handles unknown token types in segment keys gracefully', () => {
     // Exercises the default branch in tokenToString (tree.ts)
-    const syntheticParsed = [{
-      file: 'custom.vue',
-      segments: [[{ type: 'unknown' as any, value: 'custom' }]],
-    }]
+    const syntheticParsed = [
+      {
+        file: 'custom.vue',
+        segments: [
+          [
+            { type: 'unknown' as any, value: 'custom' },
+          ],
+        ],
+      },
+    ]
     const t = buildTree(syntheticParsed as any)
     expect(t.root.children.has('custom')).toBe(true)
   })
@@ -1241,7 +1403,9 @@ describe('route ordering / priority', () => {
 
 describe('mode-aware emission', () => {
   it('emits modes when files have mode variants', () => {
-    const t = buildTree(['page.client.vue', 'page.server.vue'], { modes: ['client', 'server'] })
+    const t = buildTree(['page.client.vue', 'page.server.vue'], {
+      modes: ['client', 'server'],
+    })
     const routes = toVueRouter4(t)
     expect(routes).toHaveLength(1)
     expect(routes[0].modes).toBeDefined()
@@ -1292,7 +1456,9 @@ describe('named view emission', () => {
       'pages/admin.vue',
       'pages/admin/index.vue',
     ]
-    const t = buildTree(files, { roots: ['pages/'] })
+    const t = buildTree(files, {
+      roots: ['pages/'],
+    })
     const routes = toVueRouter4(t)
 
     // @admin should be a nested route at /@admin, not a named view on /
@@ -1321,7 +1487,9 @@ describe('layer priority', () => {
     const t = buildTree([
       { path: 'layer/pages/about.vue', priority: 1 },
       { path: 'pages/about.vue', priority: 0 },
-    ], { roots: ['pages/', 'layer/pages/'] })
+    ], {
+      roots: ['pages/', 'layer/pages/'],
+    })
     const routes = toVueRouter4(t)
     expect(routes).toHaveLength(1)
     // app layer (priority 0) should win over extending layer (priority 1)
@@ -1332,7 +1500,9 @@ describe('layer priority', () => {
     const t = buildTree([
       { path: 'pages/about.vue', priority: 0 },
       { path: 'layer/pages/about.vue', priority: 1 },
-    ], { roots: ['pages/', 'layer/pages/'] })
+    ], {
+      roots: ['pages/', 'layer/pages/'],
+    })
     const routes = toVueRouter4(t)
     expect(routes).toHaveLength(1)
     expect(routes[0].file).toBe('pages/about.vue')
@@ -1342,7 +1512,9 @@ describe('layer priority', () => {
     const t = buildTree([
       { path: 'pages/about.vue', priority: 0 },
       { path: 'layer/pages/contact.vue', priority: 1 },
-    ], { roots: ['pages/', 'layer/pages/'] })
+    ], {
+      roots: ['pages/', 'layer/pages/'],
+    })
     const routes = toVueRouter4(t)
     expect(routes).toHaveLength(2)
   })
@@ -1352,7 +1524,9 @@ describe('layer priority', () => {
       { path: 'pages/dashboard.vue', priority: 0 },
       { path: 'pages/dashboard/settings.vue', priority: 0 },
       { path: 'layer/pages/dashboard/analytics.vue', priority: 1 },
-    ], { roots: ['pages/', 'layer/pages/'] })
+    ], {
+      roots: ['pages/', 'layer/pages/'],
+    })
     const routes = toVueRouter4(t)
     expect(routes).toHaveLength(1)
     expect(routes[0].file).toBe('pages/dashboard.vue')
@@ -1367,7 +1541,9 @@ describe('layer priority', () => {
     const t1 = buildTree([
       { path: 'layer/pages/index.vue', priority: 1 },
       { path: 'pages/index.vue', priority: 0 },
-    ], { roots: ['pages/', 'layer/pages/'] })
+    ], {
+      roots: ['pages/', 'layer/pages/'],
+    })
     const r1 = toVueRouter4(t1)
     expect(r1[0].file).toBe('pages/index.vue')
 
@@ -1375,7 +1551,9 @@ describe('layer priority', () => {
     const t2 = buildTree([
       { path: 'pages/index.vue', priority: 0 },
       { path: 'layer/pages/index.vue', priority: 1 },
-    ], { roots: ['pages/', 'layer/pages/'] })
+    ], {
+      roots: ['pages/', 'layer/pages/'],
+    })
     const r2 = toVueRouter4(t2)
     expect(r2[0].file).toBe('pages/index.vue')
   })
@@ -1420,8 +1598,12 @@ describe('incremental addFile', () => {
   it('supports InputFile with priority', () => {
     const t = buildTree([
       { path: 'pages/about.vue', priority: 0 },
-    ], { roots: ['pages/'] })
-    addFile(t, { path: 'layer/pages/about.vue', priority: 1 }, { roots: ['pages/', 'layer/pages/'] })
+    ], {
+      roots: ['pages/'],
+    })
+    addFile(t, { path: 'layer/pages/about.vue', priority: 1 }, {
+      roots: ['pages/', 'layer/pages/'],
+    })
     // Priority 0 file should still win
     const aboutNode = t.root.children.get('about')!
     expect(aboutNode.files).toHaveLength(1)
@@ -1592,26 +1774,40 @@ describe('static segment encoding', () => {
     ['ç', '%C3%A7'],
     ['a|b', 'a|b'],
   ])('encodes %s as vue-router and the browser do', (value, expected) => {
-    expect(toVueRouterSegment([{ type: 'static', value }])).toBe(expected)
+    expect(toVueRouterSegment([
+      { type: 'static', value },
+    ])).toBe(expected)
     expect(browserEncode(value)).toBe(expected)
   })
 
   it('escapes a literal percent sign', () => {
-    expect(toVueRouterSegment([{ type: 'static', value: '100%' }])).toBe('100%25')
-    expect(toVueRouterSegment([{ type: 'static', value: 'a%25b' }])).toBe('a%2525b')
+    expect(toVueRouterSegment([
+      { type: 'static', value: '100%' },
+    ])).toBe('100%25')
+    expect(toVueRouterSegment([
+      { type: 'static', value: 'a%25b' },
+    ])).toBe('a%2525b')
   })
 
   it('passes through an encoded slash', () => {
-    expect(toVueRouterSegment([{ type: 'static', value: 'a%2Fb' }])).toBe('a%2Fb')
+    expect(toVueRouterSegment([
+      { type: 'static', value: 'a%2Fb' },
+    ])).toBe('a%2Fb')
   })
 
   it('escapes hash and question mark so they are not read as delimiters', () => {
-    expect(toVueRouterSegment([{ type: 'static', value: 'a#b' }])).toBe('a%23b')
-    expect(toVueRouterSegment([{ type: 'static', value: 'a?b' }])).toBe('a%3Fb')
+    expect(toVueRouterSegment([
+      { type: 'static', value: 'a#b' },
+    ])).toBe('a%23b')
+    expect(toVueRouterSegment([
+      { type: 'static', value: 'a?b' },
+    ])).toBe('a%3Fb')
   })
 
   it('escapes colons after encoding', () => {
-    expect(toVueRouterSegment([{ type: 'static', value: 'a:b&c' }])).toBe('a\\:b&c')
+    expect(toVueRouterSegment([
+      { type: 'static', value: 'a:b&c' },
+    ])).toBe('a\\:b&c')
   })
 
   it.each([
@@ -1628,7 +1824,14 @@ describe('static segment encoding', () => {
   ])('matches a request for %s in a real router', (value, url) => {
     const router = createVueRouter({
       history: createMemoryHistory(),
-      routes: [{ path: `/${toVueRouterSegment([{ type: 'static', value }])}`, component: () => ({}) }],
+      routes: [
+        {
+          path: `/${toVueRouterSegment([
+            { type: 'static', value },
+          ])}`,
+          component: () => ({}),
+        },
+      ],
     })
     expect(router.resolve(url).matched).toHaveLength(1)
   })
@@ -1753,7 +1956,9 @@ describe('toVueRouter4 caching', () => {
     const first = toVueRouter4(t)
     expect(first[0].name).toBe('about')
 
-    const second = toVueRouter4(t, { getRouteName: raw => raw.toUpperCase() })
+    const second = toVueRouter4(t, {
+      getRouteName: raw => raw.toUpperCase(),
+    })
     expect(second[0].name).toBe('ABOUT')
   })
 
@@ -1779,7 +1984,9 @@ describe('toVueRouter4 caching', () => {
   })
 
   it('clones modes array', () => {
-    const t = buildTree(['page.client.vue'], { modes: ['client', 'server'] })
+    const t = buildTree(['page.client.vue'], {
+      modes: ['client', 'server'],
+    })
     const first = toVueRouter4(t)
     const second = toVueRouter4(t)
     expect(first[0].modes).not.toBe(second[0].modes)
@@ -1806,42 +2013,72 @@ describe('toVueRouter4 caching', () => {
 
 describe('attrs option', () => {
   it('collapses single mode into an attr', () => {
-    const t = buildTree(['page.server.vue'], { modes: ['client', 'server'] })
-    const routes = toVueRouter4(t, { attrs: { mode: ['client', 'server'] } })
+    const t = buildTree(['page.server.vue'], {
+      modes: ['client', 'server'],
+    })
+    const routes = toVueRouter4(t, {
+      attrs: {
+        mode: ['client', 'server'],
+      },
+    })
     expect(routes[0].mode).toBe('server')
     expect(routes[0].modes).toBeUndefined()
   })
 
   it('collapses single client mode into an attr', () => {
-    const t = buildTree(['page.client.vue'], { modes: ['client', 'server'] })
-    const routes = toVueRouter4(t, { attrs: { mode: ['client', 'server'] } })
+    const t = buildTree(['page.client.vue'], {
+      modes: ['client', 'server'],
+    })
+    const routes = toVueRouter4(t, {
+      attrs: {
+        mode: ['client', 'server'],
+      },
+    })
     expect(routes[0].mode).toBe('client')
     expect(routes[0].modes).toBeUndefined()
   })
 
   it('omits attr and emits modes when multiple modes match', () => {
-    const t = buildTree(['page.client.vue', 'page.server.vue'], { modes: ['client', 'server'] })
-    const routes = toVueRouter4(t, { attrs: { mode: ['client', 'server'] } })
+    const t = buildTree(['page.client.vue', 'page.server.vue'], {
+      modes: ['client', 'server'],
+    })
+    const routes = toVueRouter4(t, {
+      attrs: {
+        mode: ['client', 'server'],
+      },
+    })
     expect(routes[0].mode).toBeUndefined()
     expect(routes[0].modes).toEqual(['client', 'server'])
   })
 
   it('does not add attr when no modes match', () => {
     const t = buildTree(['about.vue'])
-    const routes = toVueRouter4(t, { attrs: { mode: ['client', 'server'] } })
+    const routes = toVueRouter4(t, {
+      attrs: {
+        mode: ['client', 'server'],
+      },
+    })
     expect(routes[0].mode).toBeUndefined()
     expect(routes[0].modes).toBeUndefined()
   })
 
   it('supports custom attr names', () => {
-    const t = buildTree(['api.get.vue'], { modes: ['get', 'post'] })
-    const routes = toVueRouter4(t, { attrs: { method: ['get', 'post'] } })
+    const t = buildTree(['api.get.vue'], {
+      modes: ['get', 'post'],
+    })
+    const routes = toVueRouter4(t, {
+      attrs: {
+        method: ['get', 'post'],
+      },
+    })
     expect(routes[0].method).toBe('get')
     expect(routes[0].modes).toBeUndefined()
   })
 
   it('supports multiple attr definitions', () => {
-    const t = buildTree(['page.client.vue'], { modes: ['client', 'server', 'dark', 'light'] })
+    const t = buildTree(['page.client.vue'], {
+      modes: ['client', 'server', 'dark', 'light'],
+    })
     const routes = toVueRouter4(t, {
       attrs: {
         mode: ['client', 'server'],
@@ -1854,16 +2091,28 @@ describe('attrs option', () => {
   })
 
   it('preserves modes when no attr values match', () => {
-    const t = buildTree(['page.vapor.vue'], { modes: ['vapor', 'client'] })
-    const routes = toVueRouter4(t, { attrs: { method: ['get', 'post'] } })
+    const t = buildTree(['page.vapor.vue'], {
+      modes: ['vapor', 'client'],
+    })
+    const routes = toVueRouter4(t, {
+      attrs: {
+        method: ['get', 'post'],
+      },
+    })
     // vapor doesn't match any method attr value
     expect(routes[0].method).toBeUndefined()
     expect(routes[0].modes).toEqual(['vapor'])
   })
 
   it('attrs are cloned on cached return', () => {
-    const t = buildTree(['page.server.vue'], { modes: ['client', 'server'] })
-    const opts = { attrs: { mode: ['client', 'server'] } }
+    const t = buildTree(['page.server.vue'], {
+      modes: ['client', 'server'],
+    })
+    const opts = {
+      attrs: {
+        mode: ['client', 'server'],
+      },
+    }
     const first = toVueRouter4(t, opts)
     const second = toVueRouter4(t, opts)
     expect(first[0].mode).toBe('server')
@@ -1872,8 +2121,14 @@ describe('attrs option', () => {
   })
 
   it('infers typed attrs from options', () => {
-    const t = buildTree(['page.server.vue'], { modes: ['client', 'server'] })
-    const routes = toVueRouter4(t, { attrs: { mode: ['client', 'server'] } })
+    const t = buildTree(['page.server.vue'], {
+      modes: ['client', 'server'],
+    })
+    const routes = toVueRouter4(t, {
+      attrs: {
+        mode: ['client', 'server'],
+      },
+    })
 
     // Type-level: mode is typed as 'client' | 'server' | undefined
     const mode = routes[0].mode
@@ -1887,7 +2142,9 @@ describe('attrs option', () => {
   })
 
   it('infers typed attrs for multiple attr definitions', () => {
-    const t = buildTree(['page.client.vue'], { modes: ['client', 'server', 'get', 'post'] })
+    const t = buildTree(['page.client.vue'], {
+      modes: ['client', 'server', 'get', 'post'],
+    })
     const routes = toVueRouter4(t, {
       attrs: {
         mode: ['client', 'server'],
@@ -1912,15 +2169,24 @@ describe('attrs option', () => {
 
 describe('compileParsePath', () => {
   it('produces the same result as parsePath', () => {
-    const options = { roots: ['pages/'], modes: ['client', 'server'] }
+    const options = {
+      roots: ['pages/'],
+      modes: ['client', 'server'],
+    }
     const paths = ['pages/index.vue', 'pages/about.client.vue', 'pages/[slug].vue']
     const compiled = compileParsePath(options)
     expect(compiled(paths)).toEqual(parsePath(paths, options))
   })
 
   it('works with addFile', () => {
-    const compiled = compileParsePath({ roots: ['pages/'] })
-    const t = buildTree([{ path: 'pages/about.vue' }], { roots: ['pages/'] })
+    const compiled = compileParsePath({
+      roots: ['pages/'],
+    })
+    const t = buildTree([
+      { path: 'pages/about.vue' },
+    ], {
+      roots: ['pages/'],
+    })
     addFile(t, { path: 'pages/contact.vue' }, compiled)
     const routes = toVueRouter4(t)
     expect(routes).toHaveLength(2)
@@ -1934,7 +2200,9 @@ describe('compileParsePath', () => {
 
 describe('compileParsePath edge cases', () => {
   it('compiles with custom extensions', () => {
-    const compiled = compileParsePath({ extensions: ['.vue', '.tsx'] })
+    const compiled = compileParsePath({
+      extensions: ['.vue', '.tsx'],
+    })
     const result = compiled(['about.vue', 'contact.tsx'])
     expect(result).toHaveLength(2)
     expect(result[0].segments[0][0]).toEqual({ type: 'static', value: 'about' })
@@ -1943,19 +2211,25 @@ describe('compileParsePath edge cases', () => {
 
   it('compiles with warn function', () => {
     const warnings: string[] = []
-    const compiled = compileParsePath({ warn: msg => warnings.push(msg) })
+    const compiled = compileParsePath({
+      warn: msg => warnings.push(msg),
+    })
     compiled(['[param#invalid].vue'])
     expect(warnings).toHaveLength(1)
   })
 
   it('compiles with modes', () => {
-    const compiled = compileParsePath({ modes: ['client', 'server'] })
+    const compiled = compileParsePath({
+      modes: ['client', 'server'],
+    })
     const result = compiled(['app.client.vue'])
     expect(result[0].meta?.modes).toEqual(['client'])
   })
 
   it('compiles with multiple roots (exercises sort callback)', () => {
-    const compiled = compileParsePath({ roots: ['pages/', 'layer/pages/'] })
+    const compiled = compileParsePath({
+      roots: ['pages/', 'layer/pages/'],
+    })
     const result = compiled(['pages/about.vue', 'layer/pages/contact.vue'])
     expect(result).toHaveLength(2)
     expect(result[0].segments[0][0]).toEqual({ type: 'static', value: 'about' })
@@ -1988,7 +2262,9 @@ describe('file index for removeFile', () => {
     const t = buildTree([
       { path: 'layer/pages/about.vue', priority: 1 },
       { path: 'pages/about.vue', priority: 0 },
-    ], { roots: ['pages/', 'layer/pages/'] })
+    ], {
+      roots: ['pages/', 'layer/pages/'],
+    })
     // Only the winning file should be in the index
     expect(t['~fileIndex'].has('pages/about.vue')).toBe(true)
     expect(t['~fileIndex'].has('layer/pages/about.vue')).toBe(false)
